@@ -1,0 +1,66 @@
+{% extends "tracker/base.html" %}
+{% block title %}{% if editando %}Sesión{% else %}Nueva sesión{% endif %} | Fit Progress{% endblock %}
+{% block content %}
+<div class="eyebrow">{% if editando %}Sesión en curso{% else %}Nueva sesión{% endif %}</div>
+<h1>{{ asignacion.entrenamiento.nombre }}</h1>
+<p class="muted">Guarda un ejercicio cada vez. La sesión permanecerá abierta para que puedas añadir los siguientes.</p>
+
+{% if guardados %}
+<section class="panel">
+    <h2>Ejercicios guardados</h2>
+    <ul>
+    {% for guardado in guardados %}
+        <li><strong>{{ guardado.ejercicio.nombre }}</strong><div class="meta">{% for serie in guardado.series %}Serie {{ serie.numero_serie }}: {{ serie.repeticiones }} repeticiones · {{ serie.peso }} kg{% if not forloop.last %}<br>{% endif %}{% endfor %}</div><div class="actions"><a class="button secondary" href="{% url 'editar_sesion' sesion.id %}?ejercicio={{ guardado.seleccion.id }}">Editar ejercicio</a><form method="post" action="{% url 'eliminar_ejercicio_sesion' sesion.id guardado.seleccion.id %}" onsubmit="return confirm('¿Eliminar este ejercicio de la sesión?');">{% csrf_token %}<button class="button danger" type="submit">Eliminar ejercicio</button></form></div></li>
+    {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+{% if puede_anadir or editando_ejercicio %}
+<section class="panel">
+    <h2>{% if editando %}Añadir o editar ejercicio{% else %}Primer ejercicio{% endif %}</h2>
+    <form method="post">
+        {% csrf_token %}
+        {% if editando_ejercicio %}<input type="hidden" name="editar_ejercicio" value="{{ editando_ejercicio }}">{% endif %}
+        {{ form.non_field_errors }}
+        <label for="{{ form.ejercicio.id_for_label }}">{{ form.ejercicio.label }}</label>
+        {{ form.ejercicio }}{{ form.ejercicio.errors }}
+        <label for="{{ form.numero_series.id_for_label }}">{{ form.numero_series.label }}</label>
+        {{ form.numero_series }}{{ form.numero_series.errors }}
+        <div id="series-container">
+            {% for serie in form.series_fields %}
+            <div class="set-row">
+                <div><label for="{{ serie.reps_field.id_for_label }}">Serie {{ serie.number }} - repeticiones</label>{{ serie.reps_field }}{{ serie.reps_field.errors }}</div>
+                <div><label for="{{ serie.peso_field.id_for_label }}">Peso (kg)</label>{{ serie.peso_field }}{{ serie.peso_field.errors }}</div>
+            </div>
+            {% endfor %}
+        </div>
+        <label for="{{ form.notas.id_for_label }}">{{ form.notas.label }}</label>{{ form.notas }}{{ form.notas.errors }}
+        <div class="actions"><button class="button" type="submit">Guardar ejercicio</button><a class="button secondary" href="{% url 'dashboard' %}">Salir</a></div>
+    </form>
+</section>
+{% elif not editando_ejercicio %}
+<section class="panel"><p class="muted">Ya has registrado todos los ejercicios de esta rutina.</p></section>
+{% endif %}
+    {% if sesion %}<form method="post" action="{% url 'eliminar_sesion' sesion.id %}" onsubmit="return confirm('¿Eliminar toda esta sesión?');">{% csrf_token %}<button class="button danger" type="submit">Eliminar sesión completa</button></form>{% endif %}
+<style>
+    .set-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; border-top: 1px solid #c9c4b9; padding-top: 8px; }
+    @media (max-width: 600px) { .set-row { grid-template-columns: 1fr; gap: 0; } }
+</style>
+<script>
+    const numeroSeries = document.getElementById("{{ form.numero_series.id_for_label }}");
+    const seriesContainer = document.getElementById("series-container");
+
+    numeroSeries.addEventListener("change", () => {
+        const count = Math.max(0, Math.min(20, Number.parseInt(numeroSeries.value || "0", 10)));
+        seriesContainer.innerHTML = "";
+        for (let number = 1; number <= count; number += 1) {
+            seriesContainer.insertAdjacentHTML("beforeend", `
+                <div class="set-row">
+                    <div><label for="reps_${number}">Serie ${number} - repeticiones</label><input id="reps_${number}" name="reps_${number}" type="number" min="1" required></div>
+                    <div><label for="peso_${number}">Peso (kg)</label><input id="peso_${number}" name="peso_${number}" type="number" min="0" step="0.01" required></div>
+                </div>`);
+        }
+    });
+</script>
+{% endblock %}

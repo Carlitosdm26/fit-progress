@@ -1,0 +1,16 @@
+{% extends "tracker/base.html" %}
+{% block title %}Mi progreso | Fit Progress{% endblock %}
+{% block content %}
+<div class="eyebrow">Tu espacio de entrenamiento</div>
+<h1>Hola, {{ perfil.nombre }}</h1>
+<p class="muted">Aquí tienes tus rutinas y sesiones. Registra una sesión con sus repeticiones y pesos.</p>
+<section class="stats" aria-label="Resumen">
+    <div class="stat"><strong>{{ asignaciones|length }}</strong><span>rutinas asignadas</span></div>
+    <div class="stat"><strong>{{ sesiones|length }}</strong><span>sesiones recientes</span></div>
+    <div class="stat"><strong>{{ series_registradas }}</strong><span>series registradas</span></div>
+</section>
+<section class="panel"><h2>Mis rutinas</h2><ul>
+    {% for asignacion in asignaciones %}<li><strong>{{ asignacion.entrenamiento.nombre }}</strong><div class="meta">{{ asignacion.entrenamiento.descripcion|default:"Sin descripción" }}</div><div class="actions"><a class="button" href="{% url 'registrar_sesion' asignacion.id %}">Registrar sesión</a><a class="button secondary" href="{% url 'editar_entrenamiento' asignacion.id %}">Editar rutina</a></div></li>
+    {% empty %}<li class="muted">Todavía no tienes rutinas.</li>{% endfor %}
+</ul></section>
+{% endblock %}
