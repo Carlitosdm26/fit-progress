@@ -29,8 +29,9 @@ class EmailOrUsernameAuthenticationForm(AuthenticationForm):
 				user = user_model._default_manager.filter(username__iexact=username).first()
 			if user is None:
 				logger.warning(
-					"Intento de login fallido: usuario inexistente. username=%s",
+					"Intento de login fallido: usuario inexistente. username=%s ip=%s",
 					username,
+					self.request.META.get("REMOTE_ADDR", "unknown"),
 				)
 				raise forms.ValidationError(
 					_("Usuario o contraseña incorrectos."),
@@ -38,9 +39,10 @@ class EmailOrUsernameAuthenticationForm(AuthenticationForm):
 				)
 			if not user.check_password(password):
 				logger.warning(
-					"Intento de login fallido: contraseña incorrecta. username=%s user_id=%s",
+					"Intento de login fallido: contraseña incorrecta. username=%s user_id=%s ip=%s",
 					user.username,
 					user.pk,
+					self.request.META.get("REMOTE_ADDR", "unknown"),
 				)
 				raise forms.ValidationError(
 					_("Usuario o contraseña incorrectos."),
