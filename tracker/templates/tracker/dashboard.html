@@ -1,16 +1,51 @@
 {% extends "tracker/base.html" %}
-{% block title %}Mi progreso | Fit Progress{% endblock %}
+{% block title %}Inicio | Fit Progress{% endblock %}
 {% block content %}
 <div class="eyebrow">Tu espacio de entrenamiento</div>
-<h1>Hola, {{ perfil.nombre }}</h1>
-<p class="muted">Aquí tienes tus rutinas y sesiones. Registra una sesión con sus repeticiones y pesos.</p>
+<h1>Inicio</h1>
+<p class="muted">Resumen de tu progreso y acceso rápido a tus sesiones.</p>
 <section class="stats" aria-label="Resumen">
-    <div class="stat"><strong>{{ asignaciones|length }}</strong><span>rutinas asignadas</span></div>
-    <div class="stat"><strong>{{ sesiones|length }}</strong><span>sesiones recientes</span></div>
-    <div class="stat"><strong>{{ series_registradas }}</strong><span>series registradas</span></div>
+    <div class="stat"><strong>{{ dias_trabajados }}</strong><span>Días trabajados</span></div>
+    <div class="stat"><strong>{{ sesiones_ultimos_30_dias }}</strong><span>Sesiones en los últimos 30 días</span></div>
+    <div class="stat"><strong>{{ series_ultimos_30_dias }}</strong><span>Series en los últimos 30 días</span></div>
 </section>
-<section class="panel"><h2>Mis rutinas</h2><ul>
-    {% for asignacion in asignaciones %}<li><strong>{{ asignacion.entrenamiento.nombre }}</strong><div class="meta">{{ asignacion.entrenamiento.descripcion|default:"Sin descripción" }}</div><div class="actions"><a class="button" href="{% url 'registrar_sesion' asignacion.id %}">Registrar sesión</a><a class="button secondary" href="{% url 'editar_entrenamiento' asignacion.id %}">Editar rutina</a></div></li>
-    {% empty %}<li class="muted">Todavía no tienes rutinas.</li>{% endfor %}
-</ul></section>
+<div class="content">
+    <section class="panel">
+        <h2>Mis rutinas</h2>
+        <ul>
+            {% for asignacion in asignaciones %}
+            <li>
+                <strong>{{ asignacion.entrenamiento.nombre }}</strong>
+                <div class="meta">{{ asignacion.entrenamiento.descripcion|default:"Sin descripción" }}</div>
+                <div class="actions">
+                    <a class="button" href="{% url 'registrar_sesion' asignacion.id %}">Registrar sesión</a>
+                    <a class="button secondary" href="{% url 'editar_entrenamiento' asignacion.id %}">Editar rutina</a>
+                </div>
+            </li>
+            {% empty %}
+            <li class="muted">Todavía no tienes rutinas.</li>
+            {% endfor %}
+        </ul>
+    </section>
+    <aside class="panel sidebar">
+        <h2>Últimas 5 sesiones</h2>
+        {% for sesion in ultimas_sesiones %}
+        <div class="session-item">
+            <div class="session-header">
+                <strong>{{ sesion.fecha|date:"d/m/Y" }}</strong>
+                <span>{{ sesion.fecha|time:"H:i" }}</span>
+            </div>
+            <p>{{ sesion.notas|default:"Sin notas en esta sesión."|truncatechars:120 }}</p>
+            <div class="actions" style="margin: 0;">
+                <a class="button secondary small" href="{% url 'editar_sesion' sesion.id %}">Ver sesión</a>
+            </div>
+        </div>
+        {% empty %}
+        <p class="muted">Todavía no hay sesiones registradas.</p>
+        {% endfor %}
+        <div class="actions" style="margin-top: 18px;">
+            <a class="button" href="{% url 'historial_sesiones' %}">Ver historial completo</a>
+        </div>
+    </aside>
+</div>
 {% endblock %}

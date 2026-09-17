@@ -1,0 +1,40 @@
+{% extends "tracker/base.html" %}
+{% block title %}Historial | Fit Progress{% endblock %}
+{% block content %}
+<div class="eyebrow">Historial</div>
+<h1>Sesiones por día</h1>
+<p class="muted">Consulta todas tus sesiones agrupadas por fecha.</p>
+
+{% for bloque in historial %}
+<section class="panel">
+    <h2>{{ bloque.fecha|date:"d/m/Y" }}</h2>
+    <ul>
+        {% for sesion in bloque.sesiones %}
+        <li>
+            <div class="session-header">
+                <strong>{{ sesion.usuario_entrenamiento.entrenamiento.nombre }}</strong>
+                <span>{{ sesion.fecha|time:"H:i" }}</span>
+            </div>
+            {% if sesion.notas %}
+            <p>{{ sesion.notas|linebreaksbr }}</p>
+            {% endif %}
+            <div class="meta">
+                {% for serie in sesion.series.all %}
+                    {{ serie.usuario_entrenamiento_ejercicio.entrenamiento_ejercicio.ejercicio.nombre }} · Serie {{ serie.numero_serie }}: {{ serie.repeticiones }} x {{ serie.peso }} kg{% if not forloop.last %}<br>{% endif %}
+                {% empty %}
+                    Sin ejercicios registrados.
+                {% endfor %}
+            </div>
+            <div class="actions" style="margin-bottom: 0;">
+                <a class="button secondary small" href="{% url 'editar_sesion' sesion.id %}">Ver sesión</a>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% empty %}
+<section class="panel">
+    <p class="muted">Todavía no tienes sesiones registradas.</p>
+</section>
+{% endfor %}
+{% endblock %}

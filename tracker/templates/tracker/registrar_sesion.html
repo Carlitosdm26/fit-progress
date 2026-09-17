@@ -5,6 +5,13 @@
 <h1>{{ asignacion.entrenamiento.nombre }}</h1>
 <p class="muted">Guarda un ejercicio cada vez. La sesión permanecerá abierta para que puedas añadir los siguientes.</p>
 
+{% if sesion and sesion.notas %}
+<section class="panel">
+    <h2>Notas de la sesión</h2>
+    <div class="notes-box">{{ sesion.notas|linebreaksbr }}</div>
+</section>
+{% endif %}
+
 {% if guardados %}
 <section class="panel">
     <h2>Ejercicios guardados</h2>

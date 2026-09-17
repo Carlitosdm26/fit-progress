@@ -9,6 +9,7 @@ from .views import (
     eliminar_ejercicio_sesion,
     eliminar_entrenamiento,
     eliminar_sesion,
+    historial_sesiones,
     login_view,
     logout_view,
     registrar_sesion,
@@ -16,9 +17,11 @@ from .views import (
 
 urlpatterns = [
     path("", dashboard, name="dashboard"),
+    path("inicio/", dashboard, name="inicio"),
     path("login/", login_view, name="login"),
     path("logout/", logout_view, name="logout"),
     path("ejercicios/", ejercicios, name="ejercicios"),
+    path("historial/", historial_sesiones, name="historial_sesiones"),
     path("entrenamientos/nuevo/", crear_entrenamiento, name="crear_entrenamiento"),
     path("entrenamientos/<int:asignacion_id>/editar/", editar_entrenamiento, name="editar_entrenamiento"),
     path("entrenamientos/<int:asignacion_id>/eliminar/", eliminar_entrenamiento, name="eliminar_entrenamiento"),
