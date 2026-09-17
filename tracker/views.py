@@ -1,3 +1,6 @@
+from collections import defaultdict
+from datetime import timedelta
+
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
@@ -29,11 +32,11 @@ def perfil_actual(request):
 
 def login_view(request):
 	if request.user.is_authenticated:
-		return redirect("dashboard")
+		return redirect("inicio")
 	form = AuthenticationForm(request, data=request.POST or None)
 	if request.method == "POST" and form.is_valid():
 		login(request, form.get_user())
-		return redirect("dashboard")
+		return redirect("inicio")
 	return render(request, "tracker/login.html", {"form": form})
 
 
@@ -52,21 +55,50 @@ def dashboard(request):
 	asignaciones = UsuarioEntrenamiento.objects.select_related(
 		"entrenamiento"
 	).filter(usuario=perfil)
-	sesiones = SesionEntrenamiento.objects.select_related(
+	sesiones_qs = SesionEntrenamiento.objects.select_related(
 		"usuario_entrenamiento__entrenamiento"
-	).filter(usuario_entrenamiento__usuario=perfil).prefetch_related("series")[:8]
+	).filter(usuario_entrenamiento__usuario=perfil).prefetch_related("series")
+	ultimas_sesiones = sesiones_qs.order_by("-fecha")[:5]
+	fecha_limite = timezone.now() - timedelta(days=30)
+	dias_trabajados = sesiones_qs.values_list("fecha__date", flat=True).distinct().count()
+	sesiones_ultimos_30_dias = sesiones_qs.filter(fecha__gte=fecha_limite).count()
+	series_ultimos_30_dias = Serie.objects.filter(
+		sesion_entrenamiento__usuario_entrenamiento__usuario=perfil,
+		sesion_entrenamiento__fecha__gte=fecha_limite,
+	).count()
 
 	return render(
 		request,
 		"tracker/dashboard.html",
 		{
 			"asignaciones": asignaciones,
-			"sesiones": sesiones,
-			"series_registradas": Serie.objects.filter(
-				sesion_entrenamiento__usuario_entrenamiento__usuario=perfil
-			).count(),
+			"ultimas_sesiones": ultimas_sesiones,
+			"dias_trabajados": dias_trabajados,
+			"sesiones_ultimos_30_dias": sesiones_ultimos_30_dias,
+			"series_ultimos_30_dias": series_ultimos_30_dias,
 			"perfil": perfil,
 		},
+	)
+
+
+@login_required
+def historial_sesiones(request):
+	perfil = perfil_actual(request)
+	if perfil is None:
+		return render(request, "tracker/sin_perfil.html")
+	sesiones = SesionEntrenamiento.objects.select_related(
+		"usuario_entrenamiento__entrenamiento"
+	).filter(usuario_entrenamiento__usuario=perfil).prefetch_related("series").order_by("-fecha")
+	historial = []
+	por_dia = defaultdict(list)
+	for sesion in sesiones:
+		por_dia[sesion.fecha.date()].append(sesion)
+	for dia, sesiones_dia in sorted(por_dia.items(), reverse=True):
+		historial.append({"fecha": dia, "sesiones": sesiones_dia})
+	return render(
+		request,
+		"tracker/historial.html",
+		{"perfil": perfil, "historial": historial},
 	)
 
 

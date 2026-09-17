@@ -2,8 +2,15 @@
 {% block title %}{% if editando %}Sesión{% else %}Nueva sesión{% endif %} | Fit Progress{% endblock %}
 {% block content %}
 <div class="eyebrow">{% if editando %}Sesión en curso{% else %}Nueva sesión{% endif %}</div>
-<h1>{{ asignacion.entrenamiento.nombre }}</h1>
-<p class="muted">Guarda un ejercicio cada vez. La sesión permanecerá abierta para que puedas añadir los siguientes.</p>
+<h1 class="session-date-header">{{ sesion.fecha|date:"l d \d\e F \d\e Y"|capfirst }}</h1>
+<p class="session-title-header">{{ asignacion.entrenamiento.nombre }}</p>
+
+{% if sesion and sesion.notas %}
+<section class="panel">
+    <h2>Notas de la sesión</h2>
+    <p>{{ sesion.notas|linebreaksbr }}</p>
+</section>
+{% endif %}
 
 {% if guardados %}
 <section class="panel">

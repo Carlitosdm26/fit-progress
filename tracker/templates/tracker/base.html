@@ -20,16 +20,26 @@
         .button { display: inline-block; border: 0; background: #b64f36; color: white; padding: 12px 18px; font: 700 .88rem system-ui, sans-serif; cursor: pointer; text-decoration: none; }
         .button.secondary { background: #1b2924; }
         .button.danger { background: #8f2f28; }
+        .button.small { padding: 9px 12px; font-size: .8rem; }
         .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 24px 0 40px; }
         .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 40px; }
         .stat, .panel { border-top: 2px solid #1b2924; padding: 16px 0; }
         .stat strong { display: block; font-size: 2.2rem; }
         .stat span { color: #66716b; font: .88rem system-ui, sans-serif; }
+        .session-date-header { margin: 8px 0 8px; font-size: clamp(2.3rem, 5vw, 4.2rem); line-height: 1; letter-spacing: -.04em; }
+        .session-title-header { margin: 0 0 16px; font-size: clamp(1.3rem, 2vw, 2.1rem); font-weight: 600; color: #1b2924; }
         .content { display: grid; grid-template-columns: 1.1fr .9fr; gap: 48px; }
+        .sidebar { align-content: start; }
+        .session-count { color: #7c867f; font-size: .8rem; font-weight: 600; }
+        .session-item { padding: 18px 0; border-bottom: 1px solid #c9c4b9; }
+        .session-header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+        .session-header span { color: #66716b; font: .82rem system-ui, sans-serif; }
+        .session-item p { margin: 8px 0 10px; }
         ul { list-style: none; padding: 0; margin: 0; }
         li { border-bottom: 1px solid #c9c4b9; padding: 15px 0; }
         li strong { display: block; font-size: 1.1rem; }
         .meta { color: #66716b; font: .82rem system-ui, sans-serif; margin-top: 5px; }
+        .exercise-line { display: inline-block; margin-right: 8px; }
         form { max-width: 620px; }
         label { display: block; margin: 18px 0 7px; font: 700 .9rem system-ui, sans-serif; }
         input, textarea, select { box-sizing: border-box; width: 100%; border: 1px solid #bcb7ac; background: #fffdf8; padding: 11px; font: 1rem Georgia, serif; }
@@ -39,15 +49,19 @@
         .checkbox-list label { display: flex; align-items: center; margin: 0; font-weight: 400; }
         .errorlist { color: #a53024; padding: 0; list-style: none; font: .85rem system-ui, sans-serif; }
         .message { border-left: 4px solid #b64f36; padding: 10px 14px; margin-bottom: 20px; font: .9rem system-ui, sans-serif; }
-        @media (max-width: 700px) { nav { align-items: flex-start; flex-direction: column; margin-bottom: 36px; } .stats, .content { grid-template-columns: 1fr; } .content { gap: 32px; } }
+        .back-button { position: fixed; left: 20px; top: 20px; z-index: 20; display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 50%; background: #1b2924; color: white; text-decoration: none; font-size: 1.5rem; box-shadow: 0 8px 18px rgba(27, 41, 36, .18); }
+        .notes-box { background: #fffdf8; border: 1px solid #c9c4b9; padding: 16px; margin: 18px 0 28px; }
+        @media (max-width: 700px) { nav { align-items: flex-start; flex-direction: column; margin-bottom: 36px; } .stats, .content { grid-template-columns: 1fr; } .content { gap: 32px; } .back-button { top: auto; bottom: 20px; left: 20px; } }
     </style>
 </head>
 <body>
+{% if request.path != '/' and request.path != '/inicio/' %}<a class="back-button" href="javascript:history.back()" aria-label="Volver atrás">←</a>{% endif %}
 <main>
     <nav>
-        <a class="brand" href="{% url 'dashboard' %}">Fit Progress</a>
+        <a class="brand" href="{% url 'inicio' %}">Fit Progress</a>
         {% if user.is_authenticated %}
         <div class="nav-links">
+            <a href="{% url 'inicio' %}">Inicio</a>
             <a href="{% url 'ejercicios' %}">Ejercicios</a>
             <a href="{% url 'crear_entrenamiento' %}">Nueva rutina</a>
             <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="button secondary" type="submit">Salir</button></form>

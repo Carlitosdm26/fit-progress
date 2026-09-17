@@ -247,3 +247,98 @@ class AutenticacionYRutinasTests(TestCase):
 		entrenamiento.refresh_from_db()
 		self.assertEqual(entrenamiento.nombre, "Rutina espalda")
 		self.assertEqual(entrenamiento.ejercicios.count(), 1)
+
+	def test_inicio_muestra_estadisticas_y_historial_de_sesiones(self):
+		cuenta = get_user_model().objects.create_user(
+			username="lucia@example.com", email="lucia@example.com", password="UnaClaveSegura123!"
+		)
+		perfil = Usuario.objects.create(nombre="Lucía", email="lucia@example.com", cuenta=cuenta)
+		entrenamiento = Entrenamiento.objects.create(nombre="Full body")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=perfil, entrenamiento=entrenamiento
+		)
+		ejercicio = Ejercicio.objects.create(nombre="Peso muerto", grupo_muscular="Espalda")
+		entrenamiento_ejercicio = EntrenamientoEjercicio.objects.create(
+			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion,
+			entrenamiento_ejercicio=entrenamiento_ejercicio,
+		)
+		self.client.force_login(cuenta)
+
+		sesion_hoy = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion,
+			fecha=timezone.now(),
+			notas="Sesión buena y con mucha fuerza.",
+		)
+		SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion,
+			fecha=timezone.now() - timezone.timedelta(days=12),
+			notas="Otra sesión.",
+		)
+		SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion,
+			fecha=timezone.now() - timezone.timedelta(days=45),
+			notas="Hace tiempo.",
+		)
+		Serie.objects.create(
+			sesion_entrenamiento=sesion_hoy,
+			usuario_entrenamiento_ejercicio=seleccion,
+			numero_serie=1,
+			repeticiones=5,
+			peso=Decimal("70.00"),
+		)
+		Serie.objects.create(
+			sesion_entrenamiento=sesion_hoy,
+			usuario_entrenamiento_ejercicio=seleccion,
+			numero_serie=2,
+			repeticiones=4,
+			peso=Decimal("75.00"),
+		)
+		respuesta = self.client.get(reverse("dashboard"))
+
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(respuesta, "Inicio")
+		self.assertContains(respuesta, "Días trabajados")
+		self.assertContains(respuesta, "Sesiones en los últimos 30 días")
+		self.assertContains(respuesta, "Series en los últimos 30 días")
+		self.assertContains(respuesta, "Últimas 5 sesiones")
+		self.assertContains(respuesta, "Ver historial completo")
+		self.assertContains(respuesta, "Sesión buena y con mucha fuerza.")
+
+	def test_sesion_muestra_notas_en_la_pantalla_de_edicion(self):
+		cuenta = get_user_model().objects.create_user(
+			username="marta@example.com", email="marta@example.com", password="UnaClaveSegura123!"
+		)
+		perfil = Usuario.objects.create(nombre="Marta", email="marta@example.com", cuenta=cuenta)
+		entrenamiento = Entrenamiento.objects.create(nombre="Bíceps")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=perfil, entrenamiento=entrenamiento
+		)
+		ejercicio = Ejercicio.objects.create(nombre="Curl", grupo_muscular="Brazos")
+		entrenamiento_ejercicio = EntrenamientoEjercicio.objects.create(
+			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion,
+			entrenamiento_ejercicio=entrenamiento_ejercicio,
+		)
+		sesion = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion,
+			fecha=timezone.now(),
+			notas="Notas del entrenamiento: control de tempo.",
+		)
+		Serie.objects.create(
+			sesion_entrenamiento=sesion,
+			usuario_entrenamiento_ejercicio=seleccion,
+			numero_serie=1,
+			repeticiones=10,
+			peso=Decimal("20.00"),
+		)
+		self.client.force_login(cuenta)
+
+		respuesta = self.client.get(reverse("editar_sesion", args=[sesion.pk]))
+
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(respuesta, "Notas del entrenamiento: control de tempo.")

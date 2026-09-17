@@ -3,6 +3,5 @@
 {% block content %}
 <div class="eyebrow">Catálogo disponible</div><h1>Ejercicios</h1>
 <p class="muted">Estos ejercicios están activos y se pueden incluir en tus rutinas.</p>
-<ul>{% for ejercicio in ejercicios %}<li><strong>{{ ejercicio.nombre }}</strong><div class="meta">{{ ejercicio.grupo_muscular }} · {{ ejercicio.equipamiento|default:"Sin equipamiento" }}</div></li>{% empty %}<li class="muted">No hay ejercicios disponibles.</li>{% endfor %}</ul>
-<div class="actions"><a class="button secondary" href="{% url 'dashboard' %}">Volver al dashboard</a></div>
+<ul>{% for ejercicio in ejercicios %}<li><strong>{{ ejercicio.nombre }}</strong><div class="meta" style="margin-top: 8px;">{{ ejercicio.grupo_muscular }} · {{ ejercicio.equipamiento|default:"Sin equipamiento" }}</div></li>{% empty %}<li class="muted">No hay ejercicios disponibles.</li>{% endfor %}</ul>
 {% endblock %}
