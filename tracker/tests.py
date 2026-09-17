@@ -115,6 +115,63 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertEqual(asignacion.entrenamiento.nombre, "Pecho fuerte")
 		self.assertEqual(asignacion.ejercicios_elegidos.count(), 1)
 
+	def test_usuario_puede_iniciar_sesion_con_email_sin_orden_de_mayusculas(self):
+		cuenta = get_user_model().objects.create_user(
+			username="carlos@example.com",
+			email="carlos@example.com",
+			password="UnaClaveSegura123!",
+		)
+		Usuario.objects.create(nombre="Carlos", email="carlos@example.com", cuenta=cuenta)
+
+		respuesta = self.client.post(
+			reverse("login"),
+			{"username": "CARLOS@EXAMPLE.COM", "password": "UnaClaveSegura123!"},
+			follow=True,
+		)
+
+		self.assertTrue(respuesta.wsgi_request.user.is_authenticated)
+		self.assertRedirects(respuesta, reverse("inicio"))
+
+	def test_registro_publico_crea_cuenta_sin_perfil_vinculado(self):
+		respuesta = self.client.post(
+			reverse("register"),
+			{
+				"username": "nuevo.usuario",
+				"email": "nuevo@example.com",
+				"password1": "UnaClaveSegura123!",
+				"password2": "UnaClaveSegura123!",
+			},
+			follow=True,
+		)
+
+		self.assertTrue(get_user_model().objects.filter(email="nuevo@example.com").exists())
+		self.assertTrue(respuesta.wsgi_request.user.is_authenticated)
+		self.assertContains(respuesta, "Perfil no vinculado")
+
+	def test_login_fallido_se_registra_en_logs(self):
+		get_user_model().objects.create_user(
+			username="carlos",
+			email="carlos@example.com",
+			password="UnaClaveSegura123!",
+		)
+
+		with self.assertLogs("tracker", level="WARNING") as captured:
+			self.client.post(
+				reverse("login"),
+				{"username": "carlos", "password": "password-mala"},
+			)
+
+		self.assertTrue(any("Intento de login fallido" in mensaje for mensaje in captured.output))
+		self.assertTrue(any("username=carlos" in mensaje for mensaje in captured.output))
+
+		with self.assertLogs("tracker", level="WARNING") as captured:
+			self.client.post(
+				reverse("login"),
+				{"username": "usuario_inexistente", "password": "UnaClaveSegura123!"},
+			)
+
+		self.assertTrue(any("usuario_inexistente" in mensaje for mensaje in captured.output))
+
 	def test_catalogo_requiere_login(self):
 		respuesta = self.client.get(reverse("ejercicios"))
 

@@ -12,6 +12,7 @@ from .views import (
     historial_sesiones,
     login_view,
     logout_view,
+    register_view,
     registrar_sesion,
 )
 
@@ -19,6 +20,7 @@ urlpatterns = [
     path("", dashboard, name="dashboard"),
     path("inicio/", dashboard, name="inicio"),
     path("login/", login_view, name="login"),
+    path("registro/", register_view, name="register"),
     path("logout/", logout_view, name="logout"),
     path("ejercicios/", ejercicios, name="ejercicios"),
     path("historial/", historial_sesiones, name="historial_sesiones"),

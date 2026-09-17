@@ -1,16 +1,17 @@
+import logging
 from collections import defaultdict
 from datetime import timedelta
 
 from django.contrib import messages
-from django.contrib.auth import login, logout
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.models import User
 from django.db import transaction
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 
-from .forms import EjercicioSesionForm, EntrenamientoForm
+from .forms import EmailOrUsernameAuthenticationForm, EjercicioSesionForm, EntrenamientoForm, RegistroForm
 from .models import (
 	Entrenamiento,
 	EntrenamientoEjercicio,
@@ -22,6 +23,8 @@ from .models import (
 	UsuarioEntrenamientoEjercicio,
 )
 
+logger = logging.getLogger("tracker")
+
 
 def perfil_actual(request):
 	try:
@@ -32,12 +35,44 @@ def perfil_actual(request):
 
 def login_view(request):
 	if request.user.is_authenticated:
+		logger.debug("Usuario ya autenticado, redirigiendo al inicio. user=%s", request.user.username)
 		return redirect("inicio")
-	form = AuthenticationForm(request, data=request.POST or None)
+	form = EmailOrUsernameAuthenticationForm(request, data=request.POST or None)
+	if request.method == "POST":
+		logger.debug("Intento de login para username=%s", request.POST.get("username"))
 	if request.method == "POST" and form.is_valid():
-		login(request, form.get_user())
+		user = form.get_user()
+		login(request, user)
+		logger.info("Usuario %s ha iniciado sesión.", user.username)
+		logger.debug("Login correcto. user=%s email=%s request_path=%s", user.username, user.email, request.path)
 		return redirect("inicio")
 	return render(request, "tracker/login.html", {"form": form})
+
+
+def register_view(request):
+	if request.user.is_authenticated:
+		logger.debug("Usuario ya autenticado al intentar registrarse. user=%s", request.user.username)
+		return redirect("inicio")
+	form = RegistroForm(request.POST or None)
+	if request.method == "POST":
+		logger.debug("Intento de registro con username=%s email=%s", request.POST.get("username"), request.POST.get("email"))
+	if request.method == "POST" and form.is_valid():
+		user = form.save()
+		logger.info("Usuario %s se ha registrado.", user.username)
+		logger.debug("Registro completado. username=%s email=%s", user.username, user.email)
+		auth_user = authenticate(
+			request,
+			username=user.username,
+			password=form.cleaned_data["password1"],
+		)
+		if auth_user is not None:
+			login(request, auth_user)
+			logger.info("Usuario %s ha iniciado sesión tras el registro.", auth_user.username)
+			logger.debug("Login tras registro correcto. user=%s", auth_user.username)
+			return redirect("inicio")
+		logger.warning("Registro completado pero no se pudo autenticar al usuario=%s", user.username)
+		return redirect("login")
+	return render(request, "tracker/register.html", {"form": form})
 
 
 @login_required
@@ -117,6 +152,13 @@ def crear_entrenamiento(request):
 	if perfil is None:
 		return render(request, "tracker/sin_perfil.html")
 	form = EntrenamientoForm(request.POST or None)
+	grupos_musculares = list(
+		Ejercicio.objects.filter(activo=True)
+		.exclude(grupo_muscular="")
+		.order_by("grupo_muscular")
+		.values_list("grupo_muscular", flat=True)
+		.distinct()
+	)
 	if request.method == "POST" and form.is_valid():
 		with transaction.atomic():
 			entrenamiento = Entrenamiento.objects.create(
@@ -134,9 +176,26 @@ def crear_entrenamiento(request):
 					usuario_entrenamiento=asignacion,
 					entrenamiento_ejercicio=entrenamiento_ejercicio,
 				)
+		logger.info(
+			"Usuario %s ha creado la rutina '%s' con %s ejercicios.",
+			request.user.username,
+			entrenamiento.nombre,
+			form.cleaned_data["ejercicios"].count(),
+		)
+		logger.debug(
+			"Rutina creada con detalle. user=%s perfil_id=%s rutina=%s ejercicios=%s",
+			request.user.username,
+			perfil.pk,
+			entrenamiento.nombre,
+			[ejercicio.nombre for ejercicio in form.cleaned_data["ejercicios"]],
+		)
 		messages.success(request, "Entrenamiento creado correctamente.")
 		return redirect("dashboard")
-	return render(request, "tracker/crear_entrenamiento.html", {"form": form})
+	return render(
+		request,
+		"tracker/crear_entrenamiento.html",
+		{"form": form, "grupos_musculares": grupos_musculares},
+	)
 
 
 @login_required
@@ -179,10 +238,17 @@ def editar_entrenamiento(request, asignacion_id):
 				)
 		messages.success(request, "Rutina actualizada correctamente.")
 		return redirect("dashboard")
+	grupos_musculares = list(
+		Ejercicio.objects.filter(activo=True)
+		.exclude(grupo_muscular="")
+		.order_by("grupo_muscular")
+		.values_list("grupo_muscular", flat=True)
+		.distinct()
+	)
 	return render(
 		request,
 		"tracker/crear_entrenamiento.html",
-		{"form": form, "asignacion": asignacion, "editando": True},
+		{"form": form, "asignacion": asignacion, "editando": True, "grupos_musculares": grupos_musculares},
 	)
 
 
@@ -226,6 +292,19 @@ def registrar_sesion(request, asignacion_id):
 				notas=form.cleaned_data["notas"],
 			)
 			guardar_series(sesion, form)
+		logger.info(
+			"Usuario %s ha registrado una sesión para la rutina '%s'.",
+			request.user.username,
+			asignacion.entrenamiento.nombre,
+		)
+		logger.debug(
+			"Sesión registrada. user=%s rutina=%s ejercicio=%s series=%s notas=%s",
+			request.user.username,
+			asignacion.entrenamiento.nombre,
+			form.cleaned_data["ejercicio"],
+			len(form.series_data),
+			form.cleaned_data.get("notas"),
+		)
 		messages.success(request, "Sesión registrada correctamente.")
 		return redirect("editar_sesion", sesion_id=sesion.pk)
 	return render(
