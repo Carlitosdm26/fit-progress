@@ -9,14 +9,21 @@
     <label for="grupo-muscular">Filtrar por grupo muscular</label>
     <select id="grupo-muscular">
         <option value="todos">Todos los grupos</option>
-        {% regroup form.ejercicios.field.queryset by grupo_muscular as grupos_musculares %}
-        {% for grupo in grupos_musculares %}<option value="{{ grupo.grouper|slugify }}">{{ grupo.grouper }}</option>{% endfor %}
+        {% for grupo in grupos_musculares %}
+        <option value="{{ grupo|slugify }}">{{ grupo }}</option>
+        {% endfor %}
     </select>
     <label>{{ form.ejercicios.label }}</label>
     <div class="checkbox-list" id="lista-ejercicios">
         {% for ejercicio in form.ejercicios.field.queryset %}
         <div class="exercise-option" data-grupo="{{ ejercicio.grupo_muscular|slugify }}">
-            <label><input type="checkbox" name="ejercicios" value="{{ ejercicio.pk }}"{% if ejercicio.pk|stringformat:"s" in form.data.ejercicios %} checked{% endif %}> {{ ejercicio.nombre }} <span class="meta">{{ ejercicio.equipamiento|default:"Sin equipamiento" }}</span></label>
+            <label>
+                <span class="exercise-main">
+                    <input type="checkbox" name="ejercicios" value="{{ ejercicio.pk }}"{% if ejercicio.pk|stringformat:"s" in form.data.ejercicios %} checked{% endif %}>
+                    <span>{{ ejercicio.nombre }}</span>
+                </span>
+                <span class="equipment-meta">{{ ejercicio.equipamiento|default:"Sin equipamiento" }}</span>
+            </label>
         </div>
         {% endfor %}
     </div>

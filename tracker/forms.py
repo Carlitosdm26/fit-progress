@@ -1,8 +1,96 @@
+import logging
 from decimal import Decimal
 
 from django import forms
+from django.contrib.auth import get_user_model
+from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.utils.translation import gettext_lazy as _
 
 from .models import Ejercicio, UsuarioEntrenamientoEjercicio
+
+logger = logging.getLogger("tracker")
+
+
+class EmailOrUsernameAuthenticationForm(AuthenticationForm):
+	username = forms.CharField(
+		label="Email o usuario",
+		widget=forms.TextInput(attrs={"autofocus": True}),
+	)
+
+	def clean(self):
+		username = (self.cleaned_data.get("username") or "").strip()
+		password = self.cleaned_data.get("password")
+		if username and password:
+			user_model = get_user_model()
+			user = None
+			if "@" in username:
+				user = user_model._default_manager.filter(email__iexact=username).first()
+			else:
+				user = user_model._default_manager.filter(username__iexact=username).first()
+			if user is None:
+				logger.warning(
+					"Intento de login fallido: usuario inexistente. username=%s",
+					username,
+				)
+				raise forms.ValidationError(
+					_("Usuario o contraseña incorrectos."),
+					code="invalid_login",
+				)
+			if not user.check_password(password):
+				logger.warning(
+					"Intento de login fallido: contraseña incorrecta. username=%s user_id=%s",
+					user.username,
+					user.pk,
+				)
+				raise forms.ValidationError(
+					_("Usuario o contraseña incorrectos."),
+					code="invalid_login",
+				)
+			self.user_cache = user
+			self.confirm_login_allowed(user)
+			return self.cleaned_data
+		return super().clean()
+
+
+class RegistroForm(UserCreationForm):
+	email = forms.EmailField(label="Email", required=True)
+
+	class Meta(UserCreationForm.Meta):
+		fields = ("username", "email")
+		labels = {
+			"username": "Nombre de usuario",
+			"email": "Email",
+		}
+		help_texts = {
+			"username": "",
+			"email": "",
+		}
+		error_messages = {
+			"username": {"required": "Este campo es obligatorio."},
+			"email": {"required": "Este campo es obligatorio."},
+		}
+
+	def clean_email(self):
+		email = self.cleaned_data["email"].strip()
+		if get_user_model().objects.filter(email__iexact=email).exists():
+			raise forms.ValidationError("Ya existe una cuenta con ese email.")
+		return email
+
+	def clean_username(self):
+		username = self.cleaned_data["username"].strip()
+		if not username:
+			raise forms.ValidationError("Este campo es obligatorio.")
+		return username
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.fields["password1"].label = "Contraseña"
+		self.fields["password2"].label = "Confirmar contraseña"
+		self.fields["password1"].help_text = ""
+		self.fields["password2"].help_text = ""
+		self.fields["password1"].error_messages["required"] = "Este campo es obligatorio."
+		self.fields["password2"].error_messages["required"] = "Este campo es obligatorio."
+		self.fields["password2"].error_messages["password_mismatch"] = "Las contraseñas no coinciden."
 
 
 class EntrenamientoForm(forms.Form):

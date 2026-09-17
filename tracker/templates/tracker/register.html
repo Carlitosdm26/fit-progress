@@ -1,0 +1,30 @@
+{% extends "tracker/base.html" %}
+{% block title %}Registrarse | Fit Progress{% endblock %}
+{% block content %}
+<div class="eyebrow">Nuevo acceso</div>
+<h1>Crear cuenta</h1>
+<p class="muted">Regístrate para entrar en la app. Tu perfil se activará cuando lo vinculen.</p>
+<form method="post">{% csrf_token %}
+    {{ form.non_field_errors }}
+    <label for="id_username">Nombre de usuario</label>
+    {{ form.username }}
+    {{ form.username.errors }}
+
+    <label for="id_email">Email</label>
+    {{ form.email }}
+    {{ form.email.errors }}
+
+    <label for="id_password1">Contraseña</label>
+    {{ form.password1 }}
+    {{ form.password1.errors }}
+
+    <label for="id_password2">Repetir contraseña</label>
+    {{ form.password2 }}
+    {{ form.password2.errors }}
+
+    <div class="actions">
+        <button class="button" type="submit">Registrarse</button>
+        <a class="button secondary" href="{% url 'login' %}">Ya tengo cuenta</a>
+    </div>
+</form>
+{% endblock %}

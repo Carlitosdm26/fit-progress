@@ -2,10 +2,13 @@
 {% block title %}Entrar | Fit Progress{% endblock %}
 {% block content %}
 <div class="eyebrow">Acceso personal</div><h1>Entrar</h1>
-<p class="muted">Usa tu email y contraseña para consultar tus entrenamientos.</p>
+<p class="muted">Usa tu email, nombre de usuario o email y contraseña para consultar tus entrenamientos.</p>
 <form method="post">{% csrf_token %}{{ form.non_field_errors }}
-    <label for="id_username">Email</label>{{ form.username }}{{ form.username.errors }}
+    <label for="id_username">Email o usuario</label>{{ form.username }}{{ form.username.errors }}
     <label for="id_password">Contraseña</label>{{ form.password }}{{ form.password.errors }}
-    <div class="actions"><button class="button" type="submit">Entrar</button></div>
+    <div class="actions">
+        <button class="button" type="submit">Entrar</button>
+        <a class="button secondary" href="{% url 'register' %}">Registrarse</a>
+    </div>
 </form>
 {% endblock %}

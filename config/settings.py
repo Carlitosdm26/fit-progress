@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import logging
 import os
 from pathlib import Path
 
@@ -18,6 +19,8 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
+LOGS_DIR = BASE_DIR / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
 
 
 # Quick-start development settings - unsuitable for production
@@ -165,3 +168,77 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+class InfoFilter:
+    def filter(self, record):
+        return record.name.startswith("tracker") and record.levelno in (logging.INFO, logging.WARNING)
+
+
+class ErrorFilter:
+    def filter(self, record):
+        return record.levelno >= logging.ERROR
+
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+    },
+    "filters": {
+        "info_only": {
+            "()": InfoFilter,
+        },
+        "error_only": {
+            "()": ErrorFilter,
+        },
+    },
+    "handlers": {
+        "debug_file": {
+            "level": "DEBUG",
+            "class": "logging.FileHandler",
+            "filename": str(LOGS_DIR / "debug.log"),
+            "formatter": "verbose",
+        },
+        "info_file": {
+            "level": "INFO",
+            "class": "logging.FileHandler",
+            "filename": str(LOGS_DIR / "info.log"),
+            "formatter": "verbose",
+            "filters": ["info_only"],
+        },
+        "error_file": {
+            "level": "ERROR",
+            "class": "logging.FileHandler",
+            "filename": str(LOGS_DIR / "error.log"),
+            "formatter": "verbose",
+            "filters": ["error_only"],
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["debug_file", "error_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.server": {
+            "handlers": ["debug_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["debug_file", "error_file"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "tracker": {
+            "handlers": ["debug_file", "info_file", "error_file"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+    },
+}

@@ -47,6 +47,9 @@
         .checkbox-list { list-style: none; padding: 0; }
         .checkbox-list li { border: 0; padding: 7px 0; }
         .checkbox-list label { display: flex; align-items: center; margin: 0; font-weight: 400; }
+        .exercise-option label { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
+        .exercise-main { display: flex; align-items: center; gap: 8px; }
+        .equipment-meta { margin-left: auto; color: #66716b; font: .8rem system-ui, sans-serif; }
         .errorlist { color: #a53024; padding: 0; list-style: none; font: .85rem system-ui, sans-serif; }
         .message { border-left: 4px solid #b64f36; padding: 10px 14px; margin-bottom: 20px; font: .9rem system-ui, sans-serif; }
         .back-button { position: fixed; left: 20px; top: 20px; z-index: 20; display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 50%; background: #1b2924; color: white; text-decoration: none; font-size: 1.5rem; box-shadow: 0 8px 18px rgba(27, 41, 36, .18); }
@@ -55,7 +58,7 @@
     </style>
 </head>
 <body>
-{% if request.path != '/' and request.path != '/inicio/' %}<a class="back-button" href="javascript:history.back()" aria-label="Volver atrás">←</a>{% endif %}
+{% if request.path != '/' and request.path != '/inicio/' and request.path != '/login/' %}<a class="back-button" href="javascript:history.back()" aria-label="Volver atrás">←</a>{% endif %}
 <main>
     <nav>
         <a class="brand" href="{% url 'inicio' %}">Fit Progress</a>
