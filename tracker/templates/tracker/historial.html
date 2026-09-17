@@ -2,12 +2,12 @@
 {% block title %}Historial | Fit Progress{% endblock %}
 {% block content %}
 <div class="eyebrow">Historial</div>
-<h1>Sesiones por día</h1>
+<h1>Sesiones</h1>
 <p class="muted">Consulta todas tus sesiones agrupadas por fecha.</p>
 
 {% for bloque in historial %}
 <section class="panel">
-    <h2>{{ bloque.fecha|date:"d/m/Y" }}</h2>
+    <h2>{{ bloque.fecha|date:"l d \d\e F \d\e Y"|capfirst }}</h2>
     <ul>
         {% for sesion in bloque.sesiones %}
         <li>
