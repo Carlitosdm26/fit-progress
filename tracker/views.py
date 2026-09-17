@@ -26,6 +26,13 @@ from .models import (
 logger = logging.getLogger("tracker")
 
 
+def get_client_ip(request):
+	forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+	if forwarded_for:
+		return forwarded_for.split(",")[0].strip()
+	return request.META.get("REMOTE_ADDR", "unknown")
+
+
 def perfil_actual(request):
 	try:
 		return request.user.perfil_gimnasio
@@ -34,18 +41,21 @@ def perfil_actual(request):
 
 
 def login_view(request):
+	client_ip = get_client_ip(request)
 	if request.user.is_authenticated:
-		logger.debug("Usuario ya autenticado, redirigiendo al inicio. user=%s", request.user.username)
+		logger.debug("Usuario ya autenticado, redirigiendo al inicio. user=%s ip=%s", request.user.username, client_ip)
 		return redirect("inicio")
 	form = EmailOrUsernameAuthenticationForm(request, data=request.POST or None)
 	if request.method == "POST":
-		logger.debug("Intento de login para username=%s", request.POST.get("username"))
+		logger.debug("Intento de login para username=%s ip=%s", request.POST.get("username"), client_ip)
 	if request.method == "POST" and form.is_valid():
 		user = form.get_user()
 		login(request, user)
 		logger.info("Usuario %s ha iniciado sesión.", user.username)
-		logger.debug("Login correcto. user=%s email=%s request_path=%s", user.username, user.email, request.path)
+		logger.debug("Login correcto. user=%s email=%s ip=%s request_path=%s", user.username, user.email, client_ip, request.path)
 		return redirect("inicio")
+	if request.method == "GET":
+		logger.debug("Acceso a la página de login. ip=%s", client_ip)
 	return render(request, "tracker/login.html", {"form": form})
 
 
