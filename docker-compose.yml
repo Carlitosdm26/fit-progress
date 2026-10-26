@@ -1,0 +1,18 @@
+
+services:
+  fit-progress:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fit-progress
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DB_ENGINE: mysql
+      DB_HOST: ${DB_HOST}
+      DB_PORT: "3306"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: fit_progress
