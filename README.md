@@ -43,13 +43,25 @@ No subas `.env` al repositorio. Contiene credenciales y está excluido mediante 
 
 ## Arranque
 
+### En contenedor
+
+El contenedor escucha en el puerto 80 y Docker lo publica en el puerto 80 del servidor:
+
+```bash
+docker compose up --build -d
+```
+
+La aplicación estará disponible en [http://localhost/](http://localhost/).
+
+### En local
+
 La forma recomendada de arrancar la aplicación es:
 
 ```bash
 ./run.sh
 ```
 
-El script verifica Python y `.env`, crea `.venv` si falta, instala dependencias, comprueba Django, aplica migraciones y arranca el servidor en `0.0.0.0:8000`.
+El script verifica Python y `.env`, crea `.venv` si falta, instala dependencias, comprueba Django, aplica migraciones y arranca el servidor local en `0.0.0.0:8000`.
 
 Pulsa `Ctrl+C` para detener el servidor limpiamente.
 
