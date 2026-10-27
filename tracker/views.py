@@ -5,7 +5,6 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
 from django.db import transaction
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
@@ -16,9 +15,9 @@ from .models import (
 	Entrenamiento,
 	EntrenamientoEjercicio,
 	Ejercicio,
+	FITNESS_USER_GROUP_NAME,
 	Serie,
 	SesionEntrenamiento,
-	Usuario,
 	UsuarioEntrenamiento,
 	UsuarioEntrenamientoEjercicio,
 )
@@ -34,10 +33,9 @@ def get_client_ip(request):
 
 
 def perfil_actual(request):
-	try:
-		return request.user.perfil_gimnasio
-	except Usuario.DoesNotExist:
-		return None
+	if request.user.groups.filter(name=FITNESS_USER_GROUP_NAME).exists():
+		return request.user
+	return None
 
 
 def login_view(request):

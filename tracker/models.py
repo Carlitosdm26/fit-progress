@@ -3,25 +3,7 @@ from django.db import models
 from django.conf import settings
 
 
-class Usuario(models.Model):
-	cuenta = models.OneToOneField(
-		settings.AUTH_USER_MODEL,
-		on_delete=models.SET_NULL,
-		null=True,
-		blank=True,
-		related_name="perfil_gimnasio",
-	)
-	nombre = models.CharField(max_length=120)
-	email = models.EmailField(unique=True)
-	fecha_registro = models.DateTimeField(auto_now_add=True)
-	activo = models.BooleanField(default=True)
-
-	class Meta:
-		ordering = ["nombre"]
-		indexes = [models.Index(fields=["nombre"]), models.Index(fields=["activo"])]
-
-	def __str__(self):
-		return self.nombre
+FITNESS_USER_GROUP_NAME = "Usuarios de gimnasio"
 
 
 class Entrenamiento(models.Model):
@@ -58,7 +40,9 @@ class Ejercicio(models.Model):
 
 
 class UsuarioEntrenamiento(models.Model):
-	usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name="entrenamientos")
+	usuario = models.ForeignKey(
+		settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="entrenamientos"
+	)
 	entrenamiento = models.ForeignKey(
 		Entrenamiento, on_delete=models.CASCADE, related_name="usuarios"
 	)
