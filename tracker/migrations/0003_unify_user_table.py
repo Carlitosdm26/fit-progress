@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.contrib.auth.hashers import make_password
 from django.db import migrations, models
 import django.db.models.deletion
 
@@ -70,7 +71,7 @@ def migrate_fitness_users(apps, schema_editor):
 					date_joined=profile.fecha_registro,
 					is_active=profile.activo,
 				)
-				user.set_unusable_password()
+				user.password = make_password(None)
 				user.save(using=database)
 
 		if user.pk in used_user_ids:
