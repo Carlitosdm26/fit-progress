@@ -7,22 +7,35 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 
 from .models import (
 	Ejercicio,
 	Entrenamiento,
 	EntrenamientoEjercicio,
+	FITNESS_USER_GROUP_NAME,
 	Serie,
 	SesionEntrenamiento,
-	Usuario,
 	UsuarioEntrenamiento,
 	UsuarioEntrenamientoEjercicio,
 )
 
 
+def vincular_usuario_gimnasio(user, nombre):
+	user.first_name = nombre
+	user.save(update_fields=["first_name"])
+	user.groups.add(Group.objects.get(name=FITNESS_USER_GROUP_NAME))
+	return user
+
+
 class SeguimientoModelTests(TestCase):
 	def setUp(self):
-		self.usuario = Usuario.objects.create(nombre="Ana", email="ana@example.com")
+		self.usuario = vincular_usuario_gimnasio(
+			get_user_model().objects.create_user(
+				username="ana", email="ana@example.com", password="UnaClaveSegura123!"
+			),
+			"Ana",
+		)
 		self.entrenamiento = Entrenamiento.objects.create(nombre="Pierna")
 		self.ejercicio = Ejercicio.objects.create(
 			nombre="Sentadilla", grupo_muscular="Piernas"
@@ -86,6 +99,19 @@ class SeguimientoModelTests(TestCase):
 
 
 class AutenticacionYRutinasTests(TestCase):
+	def test_cuenta_sin_grupo_no_tiene_perfil_deportivo(self):
+		cuenta = get_user_model().objects.create_user(
+			username="sin-perfil",
+			email="sin-perfil@example.com",
+			password="UnaClaveSegura123!",
+		)
+		self.client.force_login(cuenta)
+
+		respuesta = self.client.get(reverse("dashboard"))
+
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(respuesta, "Perfil no vinculado")
+
 	def test_no_existe_registro_publico(self):
 		respuesta = self.client.get("/registro/")
 
@@ -97,9 +123,7 @@ class AutenticacionYRutinasTests(TestCase):
 			email="carlos@example.com",
 			password="UnaClaveSegura123!",
 		)
-		perfil = Usuario.objects.create(
-			nombre="Carlos", email="carlos@example.com", cuenta=cuenta
-		)
+		perfil = vincular_usuario_gimnasio(cuenta, "Carlos")
 		ejercicio = Ejercicio.objects.create(
 			nombre="Press banca", grupo_muscular="Pecho", activo=True
 		)
@@ -121,7 +145,7 @@ class AutenticacionYRutinasTests(TestCase):
 			email="carlos@example.com",
 			password="UnaClaveSegura123!",
 		)
-		Usuario.objects.create(nombre="Carlos", email="carlos@example.com", cuenta=cuenta)
+		vincular_usuario_gimnasio(cuenta, "Carlos")
 
 		respuesta = self.client.post(
 			reverse("login"),
@@ -183,7 +207,7 @@ class AutenticacionYRutinasTests(TestCase):
 			email="ines@example.com",
 			password="UnaClaveSegura123!",
 		)
-		perfil = Usuario.objects.create(nombre="Inés", email="ines@example.com", cuenta=cuenta)
+		perfil = vincular_usuario_gimnasio(cuenta, "Inés")
 		entrenamiento = Entrenamiento.objects.create(nombre="Pierna")
 		asignacion = UsuarioEntrenamiento.objects.create(
 			usuario=perfil, entrenamiento=entrenamiento
@@ -251,7 +275,7 @@ class AutenticacionYRutinasTests(TestCase):
 		cuenta = get_user_model().objects.create_user(
 			username="eva@example.com", email="eva@example.com", password="UnaClaveSegura123!"
 		)
-		perfil = Usuario.objects.create(nombre="Eva", email="eva@example.com", cuenta=cuenta)
+		perfil = vincular_usuario_gimnasio(cuenta, "Eva")
 		entrenamiento = Entrenamiento.objects.create(nombre="Rutina falsos")
 		asignacion = UsuarioEntrenamiento.objects.create(
 			usuario=perfil, entrenamiento=entrenamiento
@@ -287,7 +311,7 @@ class AutenticacionYRutinasTests(TestCase):
 		cuenta = get_user_model().objects.create_user(
 			username="eva@example.com", email="eva@example.com", password="UnaClaveSegura123!"
 		)
-		perfil = Usuario.objects.create(nombre="Eva", email="eva@example.com", cuenta=cuenta)
+		perfil = vincular_usuario_gimnasio(cuenta, "Eva")
 		entrenamiento = Entrenamiento.objects.create(nombre="Rutina antigua")
 		asignacion = UsuarioEntrenamiento.objects.create(
 			usuario=perfil, entrenamiento=entrenamiento
@@ -309,7 +333,7 @@ class AutenticacionYRutinasTests(TestCase):
 		cuenta = get_user_model().objects.create_user(
 			username="lucia@example.com", email="lucia@example.com", password="UnaClaveSegura123!"
 		)
-		perfil = Usuario.objects.create(nombre="Lucía", email="lucia@example.com", cuenta=cuenta)
+		perfil = vincular_usuario_gimnasio(cuenta, "Lucía")
 		entrenamiento = Entrenamiento.objects.create(nombre="Full body")
 		asignacion = UsuarioEntrenamiento.objects.create(
 			usuario=perfil, entrenamiento=entrenamiento
@@ -368,7 +392,7 @@ class AutenticacionYRutinasTests(TestCase):
 		cuenta = get_user_model().objects.create_user(
 			username="marta@example.com", email="marta@example.com", password="UnaClaveSegura123!"
 		)
-		perfil = Usuario.objects.create(nombre="Marta", email="marta@example.com", cuenta=cuenta)
+		perfil = vincular_usuario_gimnasio(cuenta, "Marta")
 		entrenamiento = Entrenamiento.objects.create(nombre="Bíceps")
 		asignacion = UsuarioEntrenamiento.objects.create(
 			usuario=perfil, entrenamiento=entrenamiento
