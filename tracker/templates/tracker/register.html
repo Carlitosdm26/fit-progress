@@ -3,7 +3,7 @@
 {% block content %}
 <div class="eyebrow">Nuevo acceso</div>
 <h1>Crear cuenta</h1>
-<p class="muted">Regístrate para entrar en la app. Tu perfil se activará cuando lo vinculen.</p>
+<p class="muted">Regístrate para solicitar acceso. Un administrador activará tu cuenta.</p>
 <form method="post">{% csrf_token %}
     {{ form.non_field_errors }}
     <label for="id_username">Nombre de usuario</label>

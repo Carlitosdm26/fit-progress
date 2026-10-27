@@ -110,10 +110,10 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertEqual(respuesta.status_code, 200)
 		self.assertContains(respuesta, "Hola Sin perfil")
 
-	def test_no_existe_registro_publico(self):
+	def test_registro_publico_esta_disponible(self):
 		respuesta = self.client.get("/registro/")
 
-		self.assertEqual(respuesta.status_code, 404)
+		self.assertEqual(respuesta.status_code, 200)
 
 	def test_usuario_puede_crear_entrenamiento_con_ejercicios(self):
 		cuenta = get_user_model().objects.create_user(
@@ -178,7 +178,7 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertEqual(respuesta.status_code, 403)
 		self.assertContains(respuesta, "Tu cuenta no está activa.", status_code=403)
 
-	def test_registro_publico_crea_cuenta_sin_perfil_vinculado(self):
+	def test_registro_publico_crea_cuenta_inactiva(self):
 		respuesta = self.client.post(
 			reverse("register"),
 			{
@@ -189,8 +189,11 @@ class AutenticacionYRutinasTests(TestCase):
 			},
 			follow=True,
 		)
-		self.assertTrue(get_user_model().objects.filter(email="nuevo@example.com").exists())
+		cuenta = get_user_model().objects.get(email="nuevo@example.com")
+		self.assertFalse(cuenta.is_active)
 		self.assertTrue(respuesta.wsgi_request.user.is_authenticated)
+		self.assertEqual(respuesta.status_code, 403)
+		self.assertContains(respuesta, "Tu cuenta no está activa.", status_code=403)
 		self.assertNotContains(respuesta, "Perfil no vinculado")
 
 	def test_login_fallido_se_registra_en_logs(self):

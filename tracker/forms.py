@@ -77,6 +77,13 @@ class RegistroForm(UserCreationForm):
 			"email": {"required": "Este campo es obligatorio."},
 		}
 
+	def save(self, commit=True):
+		user = super().save(commit=False)
+		user.is_active = False
+		if commit:
+			user.save()
+		return user
+
 	def clean_email(self):
 		email = self.cleaned_data["email"].strip()
 		if get_user_model().objects.filter(email__iexact=email).exists():

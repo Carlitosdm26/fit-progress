@@ -5,7 +5,7 @@ Aplicación web Django para gestionar rutinas de gimnasio y registrar el progres
 ## Funcionalidades
 
 - Login individual para cada usuario.
-- Cuentas creadas únicamente por un superusuario desde el panel de administración.
+- Registro público con cuentas inactivas hasta que un administrador las active.
 - Catálogo de ejercicios activos, filtrable por grupo muscular.
 - Creación y edición de rutinas.
 - Registro progresivo de una sesión: se guarda un ejercicio cada vez.
@@ -73,7 +73,9 @@ Direcciones locales:
 
 ## Gestión de cuentas
 
-El registro público está desactivado. Solo el superusuario puede crear cuentas.
+El registro público crea cuentas inactivas. Los usuarios pueden iniciar sesión, pero solo verán un aviso hasta que un administrador active sus cuentas desde `/admin/`.
+
+Los administradores también pueden crear cuentas directamente desde `Auth > Users` y decidir si deben estar activas.
 
 Si todavía no existe un superusuario:
 
