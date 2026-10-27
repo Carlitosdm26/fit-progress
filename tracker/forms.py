@@ -17,6 +17,11 @@ class EmailOrUsernameAuthenticationForm(AuthenticationForm):
 		widget=forms.TextInput(attrs={"autofocus": True}),
 	)
 
+	def confirm_login_allowed(self, user):
+		if not user.is_active:
+			return
+		super().confirm_login_allowed(user)
+
 	def clean(self):
 		username = (self.cleaned_data.get("username") or "").strip()
 		password = self.cleaned_data.get("password")

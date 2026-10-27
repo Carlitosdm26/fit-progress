@@ -154,6 +154,30 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertTrue(respuesta.wsgi_request.user.is_authenticated)
 		self.assertRedirects(respuesta, reverse("inicio"))
 
+	def test_usuario_inactivo_puede_iniciar_sesion_y_solo_ve_mensaje(self):
+		get_user_model().objects.create_user(
+			username="inactivo",
+			email="inactivo@example.com",
+			password="UnaClaveSegura123!",
+			is_active=False,
+		)
+
+		respuesta = self.client.post(
+			reverse("login"),
+			{"username": "inactivo", "password": "UnaClaveSegura123!"},
+			follow=True,
+		)
+
+		self.assertTrue(respuesta.wsgi_request.user.is_authenticated)
+		self.assertEqual(respuesta.status_code, 403)
+		self.assertContains(respuesta, "Tu cuenta no está activa.", status_code=403)
+		self.assertNotContains(respuesta, "Ejercicios")
+
+		respuesta = self.client.get(reverse("ejercicios"))
+
+		self.assertEqual(respuesta.status_code, 403)
+		self.assertContains(respuesta, "Tu cuenta no está activa.", status_code=403)
+
 	def test_registro_publico_crea_cuenta_sin_perfil_vinculado(self):
 		respuesta = self.client.post(
 			reverse("register"),

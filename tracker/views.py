@@ -1,6 +1,7 @@
 import logging
 from collections import defaultdict
 from datetime import timedelta
+from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
@@ -33,6 +34,16 @@ def get_client_ip(request):
 
 def perfil_actual(request):
 	return request.user
+
+
+def active_user_required(view_func):
+	@wraps(view_func)
+	def wrapped_view(request, *args, **kwargs):
+		if not request.user.is_active:
+			return render(request, "tracker/cuenta_inactiva.html", status=403)
+		return view_func(request, *args, **kwargs)
+
+	return wrapped_view
 
 
 def login_view(request):
@@ -88,6 +99,7 @@ def logout_view(request):
 
 
 @login_required
+@active_user_required
 def dashboard(request):
 	perfil = perfil_actual(request)
 	if perfil is None:
@@ -122,6 +134,7 @@ def dashboard(request):
 
 
 @login_required
+@active_user_required
 def historial_sesiones(request):
 	perfil = perfil_actual(request)
 	if perfil is None:
@@ -143,6 +156,7 @@ def historial_sesiones(request):
 
 
 @login_required
+@active_user_required
 def ejercicios(request):
 	return render(
 		request,
@@ -152,6 +166,7 @@ def ejercicios(request):
 
 
 @login_required
+@active_user_required
 def crear_entrenamiento(request):
 	perfil = perfil_actual(request)
 	if perfil is None:
@@ -204,6 +219,7 @@ def crear_entrenamiento(request):
 
 
 @login_required
+@active_user_required
 def editar_entrenamiento(request, asignacion_id):
 	perfil = perfil_actual(request)
 	if perfil is None:
@@ -258,6 +274,7 @@ def editar_entrenamiento(request, asignacion_id):
 
 
 @login_required
+@active_user_required
 @require_POST
 def eliminar_entrenamiento(request, asignacion_id):
 	perfil = perfil_actual(request)
@@ -279,6 +296,7 @@ def eliminar_entrenamiento(request, asignacion_id):
 
 
 @login_required
+@active_user_required
 def registrar_sesion(request, asignacion_id):
 	perfil = perfil_actual(request)
 	if perfil is None:
@@ -324,6 +342,7 @@ def registrar_sesion(request, asignacion_id):
 
 
 @login_required
+@active_user_required
 def editar_sesion(request, sesion_id):
 	perfil = perfil_actual(request)
 	if perfil is None:
@@ -377,6 +396,7 @@ def editar_sesion(request, sesion_id):
 
 
 @login_required
+@active_user_required
 @require_POST
 def eliminar_sesion(request, sesion_id):
 	perfil = perfil_actual(request)
@@ -392,6 +412,7 @@ def eliminar_sesion(request, sesion_id):
 
 
 @login_required
+@active_user_required
 @require_POST
 def eliminar_ejercicio_sesion(request, sesion_id, seleccion_id):
 	perfil = perfil_actual(request)

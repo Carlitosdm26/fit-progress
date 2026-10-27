@@ -83,6 +83,8 @@ Si todavía no existe un superusuario:
 
 Después, crea el usuario en `Auth > Users` desde `/admin/`, indicando su nombre y email. La cuenta de Django guarda tanto los datos de acceso como el perfil deportivo; no hace falta asignar un grupo ni crear o vincular un registro separado en `Tracker > Usuarios`.
 
+Las cuentas inactivas pueden iniciar sesión, pero solo verán un aviso para contactar con un administrador; no podrán acceder a las páginas de la aplicación hasta que se active su cuenta.
+
 Antes de desplegar la migración que unifica las tablas, haz una copia de seguridad de la base de datos. Los perfiles sin cuenta vinculada se convierten en cuentas con contraseña no utilizable; el superusuario deberá establecerles una contraseña desde el panel de administración.
 
 ## Flujo de usuario
