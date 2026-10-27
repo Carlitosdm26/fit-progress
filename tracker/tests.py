@@ -7,13 +7,11 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
 
 from .models import (
 	Ejercicio,
 	Entrenamiento,
 	EntrenamientoEjercicio,
-	FITNESS_USER_GROUP_NAME,
 	Serie,
 	SesionEntrenamiento,
 	UsuarioEntrenamiento,
@@ -24,7 +22,6 @@ from .models import (
 def vincular_usuario_gimnasio(user, nombre):
 	user.first_name = nombre
 	user.save(update_fields=["first_name"])
-	user.groups.add(Group.objects.get(name=FITNESS_USER_GROUP_NAME))
 	return user
 
 
@@ -99,18 +96,19 @@ class SeguimientoModelTests(TestCase):
 
 
 class AutenticacionYRutinasTests(TestCase):
-	def test_cuenta_sin_grupo_no_tiene_perfil_deportivo(self):
+	def test_cuenta_activa_sin_grupo_tiene_perfil_deportivo(self):
 		cuenta = get_user_model().objects.create_user(
 			username="sin-perfil",
 			email="sin-perfil@example.com",
 			password="UnaClaveSegura123!",
+			first_name="Sin perfil",
 		)
 		self.client.force_login(cuenta)
 
 		respuesta = self.client.get(reverse("dashboard"))
 
 		self.assertEqual(respuesta.status_code, 200)
-		self.assertContains(respuesta, "Perfil no vinculado")
+		self.assertContains(respuesta, "Hola Sin perfil")
 
 	def test_no_existe_registro_publico(self):
 		respuesta = self.client.get("/registro/")
@@ -167,10 +165,9 @@ class AutenticacionYRutinasTests(TestCase):
 			},
 			follow=True,
 		)
-
 		self.assertTrue(get_user_model().objects.filter(email="nuevo@example.com").exists())
 		self.assertTrue(respuesta.wsgi_request.user.is_authenticated)
-		self.assertContains(respuesta, "Perfil no vinculado")
+		self.assertNotContains(respuesta, "Perfil no vinculado")
 
 	def test_login_fallido_se_registra_en_logs(self):
 		get_user_model().objects.create_user(
