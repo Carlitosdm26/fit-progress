@@ -15,7 +15,6 @@ from .models import (
 	Entrenamiento,
 	EntrenamientoEjercicio,
 	Ejercicio,
-	FITNESS_USER_GROUP_NAME,
 	Serie,
 	SesionEntrenamiento,
 	UsuarioEntrenamiento,
@@ -33,9 +32,7 @@ def get_client_ip(request):
 
 
 def perfil_actual(request):
-	if request.user.groups.filter(name=FITNESS_USER_GROUP_NAME).exists():
-		return request.user
-	return None
+	return request.user
 
 
 def login_view(request):

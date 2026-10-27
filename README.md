@@ -81,7 +81,7 @@ Si todavía no existe un superusuario:
 .venv/bin/python manage.py createsuperuser
 ```
 
-Después, crea el usuario en `Auth > Users` desde `/admin/`, indicando su nombre y email. En la sección de permisos, asígnale el grupo `Usuarios de gimnasio` para habilitar el acceso a la aplicación. La cuenta de Django guarda tanto los datos de acceso como el perfil; ya no hay que crear ni vincular un registro separado en `Tracker > Usuarios`.
+Después, crea el usuario en `Auth > Users` desde `/admin/`, indicando su nombre y email. La cuenta de Django guarda tanto los datos de acceso como el perfil deportivo; no hace falta asignar un grupo ni crear o vincular un registro separado en `Tracker > Usuarios`.
 
 Antes de desplegar la migración que unifica las tablas, haz una copia de seguridad de la base de datos. Los perfiles sin cuenta vinculada se convierten en cuentas con contraseña no utilizable; el superusuario deberá establecerles una contraseña desde el panel de administración.
 
