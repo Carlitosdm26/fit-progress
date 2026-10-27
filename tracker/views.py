@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 from django.utils import timezone
@@ -172,6 +173,9 @@ def crear_entrenamiento(request):
 	if perfil is None:
 		return render(request, "tracker/sin_perfil.html")
 	form = EntrenamientoForm(request.POST or None)
+	ejercicios_seleccionados = {
+		str(ejercicio_id) for ejercicio_id in (form["ejercicios"].value() or [])
+	}
 	grupos_musculares = list(
 		Ejercicio.objects.filter(activo=True)
 		.exclude(grupo_muscular="")
@@ -214,7 +218,11 @@ def crear_entrenamiento(request):
 	return render(
 		request,
 		"tracker/crear_entrenamiento.html",
-		{"form": form, "grupos_musculares": grupos_musculares},
+		{
+			"form": form,
+			"grupos_musculares": grupos_musculares,
+			"ejercicios_seleccionados": ejercicios_seleccionados,
+		},
 	)
 
 
@@ -230,7 +238,7 @@ def editar_entrenamiento(request, asignacion_id):
 	if asignacion is None:
 		return redirect("dashboard")
 	entrenamiento = asignacion.entrenamiento
-	seleccionados = entrenamiento.ejercicios.values_list("ejercicio_id", flat=True)
+	seleccionados = list(entrenamiento.ejercicios.values_list("ejercicio_id", flat=True))
 	form = EntrenamientoForm(
 		request.POST or None,
 		initial={
@@ -239,6 +247,12 @@ def editar_entrenamiento(request, asignacion_id):
 			"ejercicios": seleccionados,
 		},
 	)
+	form.fields["ejercicios"].queryset = Ejercicio.objects.filter(
+		Q(activo=True) | Q(pk__in=seleccionados)
+	)
+	ejercicios_seleccionados = {
+		str(ejercicio_id) for ejercicio_id in (form["ejercicios"].value() or [])
+	}
 	if request.method == "POST" and form.is_valid():
 		with transaction.atomic():
 			entrenamiento.nombre = form.cleaned_data["nombre"]
@@ -269,7 +283,13 @@ def editar_entrenamiento(request, asignacion_id):
 	return render(
 		request,
 		"tracker/crear_entrenamiento.html",
-		{"form": form, "asignacion": asignacion, "editando": True, "grupos_musculares": grupos_musculares},
+		{
+			"form": form,
+			"asignacion": asignacion,
+			"editando": True,
+			"grupos_musculares": grupos_musculares,
+			"ejercicios_seleccionados": ejercicios_seleccionados,
+		},
 	)
 
 

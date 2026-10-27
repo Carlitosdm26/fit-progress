@@ -137,6 +137,44 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertEqual(asignacion.entrenamiento.nombre, "Pecho fuerte")
 		self.assertEqual(asignacion.ejercicios_elegidos.count(), 1)
 
+	def test_editar_rutina_muestra_marcados_los_ejercicios_asignados(self):
+		cuenta = get_user_model().objects.create_user(
+			username="rutina@example.com",
+			email="rutina@example.com",
+			******,
+		)
+		perfil = vincular_usuario_gimnasio(cuenta, "Rutina")
+		entrenamiento = Entrenamiento.objects.create(nombre="Rutina existente")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=perfil, entrenamiento=entrenamiento
+		)
+		ejercicio_asignado = Ejercicio.objects.create(
+			nombre="Press banca", grupo_muscular="Pecho"
+		)
+		EntrenamientoEjercicio.objects.create(
+			entrenamiento=entrenamiento, ejercicio=ejercicio_asignado, orden=1
+		)
+		ejercicio_no_asignado = Ejercicio.objects.create(
+			nombre="Sentadilla", grupo_muscular="Piernas"
+		)
+		self.client.force_login(cuenta)
+
+		respuesta = self.client.get(
+			reverse("editar_entrenamiento", args=[asignacion.pk])
+		)
+
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(
+			respuesta,
+			f'name="ejercicios" value="{ejercicio_asignado.pk}" checked',
+			html=False,
+		)
+		self.assertNotContains(
+			respuesta,
+			f'name="ejercicios" value="{ejercicio_no_asignado.pk}" checked',
+			html=False,
+		)
+
 	def test_usuario_puede_iniciar_sesion_con_email_sin_orden_de_mayusculas(self):
 		cuenta = get_user_model().objects.create_user(
 			username="carlos@example.com",

@@ -19,7 +19,7 @@
         <div class="exercise-option" data-grupo="{{ ejercicio.grupo_muscular|slugify }}">
             <label>
                 <span class="exercise-main">
-                    <input type="checkbox" name="ejercicios" value="{{ ejercicio.pk }}"{% if ejercicio.pk|stringformat:"s" in form.data.ejercicios %} checked{% endif %}>
+                    <input type="checkbox" name="ejercicios" value="{{ ejercicio.pk }}"{% if ejercicio.pk|stringformat:"s" in ejercicios_seleccionados %} checked{% endif %}>
                     <span>{{ ejercicio.nombre }}</span>
                 </span>
                 <span class="equipment-meta">{{ ejercicio.equipamiento|default:"Sin equipamiento" }}</span>
