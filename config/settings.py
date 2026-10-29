@@ -30,10 +30,13 @@ LOGS_DIR.mkdir(exist_ok=True)
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-change-me")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ["*"]
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://carlitosdm26.blitz.cloud",
+]
 
 # Application definition
 
