@@ -5,7 +5,7 @@ Aplicación web Django para gestionar rutinas de gimnasio y registrar el progres
 ## Funcionalidades
 
 - Login individual para cada usuario.
-- Cuentas creadas únicamente por un superusuario desde el panel de administración.
+- Registro público con cuentas inactivas hasta que un administrador las active.
 - Catálogo de ejercicios activos, filtrable por grupo muscular.
 - Creación y edición de rutinas.
 - Registro progresivo de una sesión: se guarda un ejercicio cada vez.
@@ -73,7 +73,9 @@ Direcciones locales:
 
 ## Gestión de cuentas
 
-El registro público está desactivado. Solo el superusuario puede crear cuentas.
+El registro público crea cuentas inactivas. Los usuarios pueden iniciar sesión, pero solo verán un aviso hasta que un administrador active sus cuentas desde `/admin/`.
+
+Los administradores también pueden crear cuentas directamente desde `Auth > Users` y decidir si deben estar activas.
 
 Si todavía no existe un superusuario:
 
@@ -81,14 +83,11 @@ Si todavía no existe un superusuario:
 .venv/bin/python manage.py createsuperuser
 ```
 
-Después:
+Después, crea el usuario en `Auth > Users` desde `/admin/`, indicando su nombre y email. La cuenta de Django guarda tanto los datos de acceso como el perfil deportivo; no hace falta asignar un grupo ni crear o vincular un registro separado en `Tracker > Usuarios`.
 
-1. Entra en `Auth > Users` desde `/admin/` y crea la cuenta de acceso.
-2. Entra en `Tracker > Usuarios`.
-3. Crea o edita el perfil deportivo.
-4. Selecciona la cuenta en el campo `cuenta` para vincular el login con el perfil.
+Las cuentas inactivas pueden iniciar sesión, pero solo verán un aviso para contactar con un administrador; no podrán acceder a las páginas de la aplicación hasta que se active su cuenta.
 
-La cuenta de Django (`auth_user`) gestiona la autenticación y el perfil deportivo (`tracker_usuario`) contiene los datos del gimnasio. Es una relación uno a uno.
+Antes de desplegar la migración que unifica las tablas, haz una copia de seguridad de la base de datos. Los perfiles sin cuenta vinculada se convierten en cuentas con contraseña no utilizable; el superusuario deberá establecerles una contraseña desde el panel de administración.
 
 ## Flujo de usuario
 
@@ -124,7 +123,7 @@ Las acciones de borrado se realizan mediante `POST` y requieren autenticación. 
 
 ## Modelo principal
 
-- `Usuario`: perfil deportivo vinculado a una cuenta de Django.
+- `User` de Django: datos de acceso y perfil deportivo en una sola cuenta.
 - `Entrenamiento`: rutina reutilizable.
 - `Ejercicio`: catálogo de ejercicios.
 - `UsuarioEntrenamiento`: asignación de una rutina a un usuario.

@@ -47,7 +47,17 @@
     </form>
 </section>
 {% elif not editando_ejercicio %}
-<section class="panel"><p class="muted">Ya has registrado todos los ejercicios de esta rutina.</p></section>
+<section class="panel">
+    {% if sesion %}
+    <p class="muted">Ya has registrado todos los ejercicios de esta sesión.</p>
+    <div class="actions">
+        <a class="button" href="{% url 'registrar_sesion' asignacion.id %}">Registrar otra sesión</a>
+        <a class="button secondary" href="{% url 'dashboard' %}">Volver al inicio</a>
+    </div>
+    {% else %}
+    <p class="muted">Esta rutina todavía no tiene ejercicios disponibles.</p>
+    {% endif %}
+</section>
 {% endif %}
     {% if sesion %}<form method="post" action="{% url 'eliminar_sesion' sesion.id %}" onsubmit="return confirm('¿Eliminar toda esta sesión?');">{% csrf_token %}<button class="button danger" type="submit">Eliminar sesión completa</button></form>{% endif %}
 <style>

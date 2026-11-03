@@ -17,6 +17,11 @@ class EmailOrUsernameAuthenticationForm(AuthenticationForm):
 		widget=forms.TextInput(attrs={"autofocus": True}),
 	)
 
+	def confirm_login_allowed(self, user):
+		if not user.is_active:
+			return
+		super().confirm_login_allowed(user)
+
 	def clean(self):
 		username = (self.cleaned_data.get("username") or "").strip()
 		password = self.cleaned_data.get("password")
@@ -71,6 +76,13 @@ class RegistroForm(UserCreationForm):
 			"username": {"required": "Este campo es obligatorio."},
 			"email": {"required": "Este campo es obligatorio."},
 		}
+
+	def save(self, commit=True):
+		user = super().save(commit=False)
+		user.is_active = False
+		if commit:
+			user.save()
+		return user
 
 	def clean_email(self):
 		email = self.cleaned_data["email"].strip()

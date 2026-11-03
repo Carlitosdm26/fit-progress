@@ -32,7 +32,7 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-change-me")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -59,6 +59,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 LOGIN_URL = "/login/"
+AUTHENTICATION_BACKENDS = ["tracker.auth_backends.AllowInactiveModelBackend"]
 
 TEMPLATES = [
     {

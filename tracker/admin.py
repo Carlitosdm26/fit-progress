@@ -6,18 +6,9 @@ from .models import (
 	EntrenamientoEjercicio,
 	Serie,
 	SesionEntrenamiento,
-	Usuario,
 	UsuarioEntrenamiento,
 	UsuarioEntrenamientoEjercicio,
 )
-
-
-@admin.register(Usuario)
-class UsuarioAdmin(admin.ModelAdmin):
-	list_display = ("nombre", "email", "cuenta", "activo", "fecha_registro")
-	list_filter = ("activo",)
-	search_fields = ("nombre", "email")
-	autocomplete_fields = ("cuenta",)
 
 
 @admin.register(Entrenamiento)

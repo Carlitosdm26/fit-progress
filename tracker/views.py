@@ -1,12 +1,13 @@
 import logging
 from collections import defaultdict
 from datetime import timedelta
+from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 from django.utils import timezone
@@ -18,7 +19,6 @@ from .models import (
 	Ejercicio,
 	Serie,
 	SesionEntrenamiento,
-	Usuario,
 	UsuarioEntrenamiento,
 	UsuarioEntrenamientoEjercicio,
 )
@@ -34,10 +34,17 @@ def get_client_ip(request):
 
 
 def perfil_actual(request):
-	try:
-		return request.user.perfil_gimnasio
-	except Usuario.DoesNotExist:
-		return None
+	return request.user
+
+
+def active_user_required(view_func):
+	@wraps(view_func)
+	def wrapped_view(request, *args, **kwargs):
+		if not request.user.is_active:
+			return render(request, "tracker/cuenta_inactiva.html", status=403)
+		return view_func(request, *args, **kwargs)
+
+	return wrapped_view
 
 
 def login_view(request):
@@ -93,6 +100,7 @@ def logout_view(request):
 
 
 @login_required
+@active_user_required
 def dashboard(request):
 	perfil = perfil_actual(request)
 	if perfil is None:
@@ -127,6 +135,7 @@ def dashboard(request):
 
 
 @login_required
+@active_user_required
 def historial_sesiones(request):
 	perfil = perfil_actual(request)
 	if perfil is None:
@@ -148,6 +157,7 @@ def historial_sesiones(request):
 
 
 @login_required
+@active_user_required
 def ejercicios(request):
 	return render(
 		request,
@@ -157,11 +167,15 @@ def ejercicios(request):
 
 
 @login_required
+@active_user_required
 def crear_entrenamiento(request):
 	perfil = perfil_actual(request)
 	if perfil is None:
 		return render(request, "tracker/sin_perfil.html")
 	form = EntrenamientoForm(request.POST or None)
+	ejercicios_seleccionados = {
+		str(ejercicio_id) for ejercicio_id in (form["ejercicios"].value() or [])
+	}
 	grupos_musculares = list(
 		Ejercicio.objects.filter(activo=True)
 		.exclude(grupo_muscular="")
@@ -204,11 +218,16 @@ def crear_entrenamiento(request):
 	return render(
 		request,
 		"tracker/crear_entrenamiento.html",
-		{"form": form, "grupos_musculares": grupos_musculares},
+		{
+			"form": form,
+			"grupos_musculares": grupos_musculares,
+			"ejercicios_seleccionados": ejercicios_seleccionados,
+		},
 	)
 
 
 @login_required
+@active_user_required
 def editar_entrenamiento(request, asignacion_id):
 	perfil = perfil_actual(request)
 	if perfil is None:
@@ -219,7 +238,7 @@ def editar_entrenamiento(request, asignacion_id):
 	if asignacion is None:
 		return redirect("dashboard")
 	entrenamiento = asignacion.entrenamiento
-	seleccionados = entrenamiento.ejercicios.values_list("ejercicio_id", flat=True)
+	seleccionados = list(entrenamiento.ejercicios.values_list("ejercicio_id", flat=True))
 	form = EntrenamientoForm(
 		request.POST or None,
 		initial={
@@ -228,6 +247,12 @@ def editar_entrenamiento(request, asignacion_id):
 			"ejercicios": seleccionados,
 		},
 	)
+	form.fields["ejercicios"].queryset = Ejercicio.objects.filter(
+		Q(activo=True) | Q(pk__in=seleccionados)
+	)
+	ejercicios_seleccionados = {
+		str(ejercicio_id) for ejercicio_id in (form["ejercicios"].value() or [])
+	}
 	if request.method == "POST" and form.is_valid():
 		with transaction.atomic():
 			entrenamiento.nombre = form.cleaned_data["nombre"]
@@ -258,11 +283,18 @@ def editar_entrenamiento(request, asignacion_id):
 	return render(
 		request,
 		"tracker/crear_entrenamiento.html",
-		{"form": form, "asignacion": asignacion, "editando": True, "grupos_musculares": grupos_musculares},
+		{
+			"form": form,
+			"asignacion": asignacion,
+			"editando": True,
+			"grupos_musculares": grupos_musculares,
+			"ejercicios_seleccionados": ejercicios_seleccionados,
+		},
 	)
 
 
 @login_required
+@active_user_required
 @require_POST
 def eliminar_entrenamiento(request, asignacion_id):
 	perfil = perfil_actual(request)
@@ -284,6 +316,7 @@ def eliminar_entrenamiento(request, asignacion_id):
 
 
 @login_required
+@active_user_required
 def registrar_sesion(request, asignacion_id):
 	perfil = perfil_actual(request)
 	if perfil is None:
@@ -329,6 +362,7 @@ def registrar_sesion(request, asignacion_id):
 
 
 @login_required
+@active_user_required
 def editar_sesion(request, sesion_id):
 	perfil = perfil_actual(request)
 	if perfil is None:
@@ -382,6 +416,7 @@ def editar_sesion(request, sesion_id):
 
 
 @login_required
+@active_user_required
 @require_POST
 def eliminar_sesion(request, sesion_id):
 	perfil = perfil_actual(request)
@@ -397,6 +432,7 @@ def eliminar_sesion(request, sesion_id):
 
 
 @login_required
+@active_user_required
 @require_POST
 def eliminar_ejercicio_sesion(request, sesion_id, seleccion_id):
 	perfil = perfil_actual(request)

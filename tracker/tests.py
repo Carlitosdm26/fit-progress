@@ -14,15 +14,25 @@ from .models import (
 	EntrenamientoEjercicio,
 	Serie,
 	SesionEntrenamiento,
-	Usuario,
 	UsuarioEntrenamiento,
 	UsuarioEntrenamientoEjercicio,
 )
 
 
+def vincular_usuario_gimnasio(user, nombre):
+	user.first_name = nombre
+	user.save(update_fields=["first_name"])
+	return user
+
+
 class SeguimientoModelTests(TestCase):
 	def setUp(self):
-		self.usuario = Usuario.objects.create(nombre="Ana", email="ana@example.com")
+		self.usuario = vincular_usuario_gimnasio(
+			get_user_model().objects.create_user(
+				username="ana", email="ana@example.com", password="UnaClaveSegura123!"
+			),
+			"Ana",
+		)
 		self.entrenamiento = Entrenamiento.objects.create(nombre="Pierna")
 		self.ejercicio = Ejercicio.objects.create(
 			nombre="Sentadilla", grupo_muscular="Piernas"
@@ -86,10 +96,24 @@ class SeguimientoModelTests(TestCase):
 
 
 class AutenticacionYRutinasTests(TestCase):
-	def test_no_existe_registro_publico(self):
+	def test_cuenta_activa_sin_grupo_tiene_perfil_deportivo(self):
+		cuenta = get_user_model().objects.create_user(
+			username="sin-perfil",
+			email="sin-perfil@example.com",
+			password="UnaClaveSegura123!",
+			first_name="Sin perfil",
+		)
+		self.client.force_login(cuenta)
+
+		respuesta = self.client.get(reverse("dashboard"))
+
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(respuesta, "Hola Sin perfil")
+
+	def test_registro_publico_esta_disponible(self):
 		respuesta = self.client.get("/registro/")
 
-		self.assertEqual(respuesta.status_code, 404)
+		self.assertEqual(respuesta.status_code, 200)
 
 	def test_usuario_puede_crear_entrenamiento_con_ejercicios(self):
 		cuenta = get_user_model().objects.create_user(
@@ -97,9 +121,7 @@ class AutenticacionYRutinasTests(TestCase):
 			email="carlos@example.com",
 			password="UnaClaveSegura123!",
 		)
-		perfil = Usuario.objects.create(
-			nombre="Carlos", email="carlos@example.com", cuenta=cuenta
-		)
+		perfil = vincular_usuario_gimnasio(cuenta, "Carlos")
 		ejercicio = Ejercicio.objects.create(
 			nombre="Press banca", grupo_muscular="Pecho", activo=True
 		)
@@ -115,13 +137,51 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertEqual(asignacion.entrenamiento.nombre, "Pecho fuerte")
 		self.assertEqual(asignacion.ejercicios_elegidos.count(), 1)
 
+	def test_editar_rutina_muestra_marcados_los_ejercicios_asignados(self):
+		cuenta = get_user_model().objects.create_user(
+			username="rutina@example.com",
+			email="rutina@example.com",
+			password="UnaClaveSegura123!",
+		)
+		perfil = vincular_usuario_gimnasio(cuenta, "Rutina")
+		entrenamiento = Entrenamiento.objects.create(nombre="Rutina existente")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=perfil, entrenamiento=entrenamiento
+		)
+		ejercicio_asignado = Ejercicio.objects.create(
+			nombre="Press banca", grupo_muscular="Pecho"
+		)
+		EntrenamientoEjercicio.objects.create(
+			entrenamiento=entrenamiento, ejercicio=ejercicio_asignado, orden=1
+		)
+		ejercicio_no_asignado = Ejercicio.objects.create(
+			nombre="Sentadilla", grupo_muscular="Piernas"
+		)
+		self.client.force_login(cuenta)
+
+		respuesta = self.client.get(
+			reverse("editar_entrenamiento", args=[asignacion.pk])
+		)
+
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(
+			respuesta,
+			f'name="ejercicios" value="{ejercicio_asignado.pk}" checked',
+			html=False,
+		)
+		self.assertNotContains(
+			respuesta,
+			f'name="ejercicios" value="{ejercicio_no_asignado.pk}" checked',
+			html=False,
+		)
+
 	def test_usuario_puede_iniciar_sesion_con_email_sin_orden_de_mayusculas(self):
 		cuenta = get_user_model().objects.create_user(
 			username="carlos@example.com",
 			email="carlos@example.com",
 			password="UnaClaveSegura123!",
 		)
-		Usuario.objects.create(nombre="Carlos", email="carlos@example.com", cuenta=cuenta)
+		vincular_usuario_gimnasio(cuenta, "Carlos")
 
 		respuesta = self.client.post(
 			reverse("login"),
@@ -132,7 +192,31 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertTrue(respuesta.wsgi_request.user.is_authenticated)
 		self.assertRedirects(respuesta, reverse("inicio"))
 
-	def test_registro_publico_crea_cuenta_sin_perfil_vinculado(self):
+	def test_usuario_inactivo_puede_iniciar_sesion_y_solo_ve_mensaje(self):
+		get_user_model().objects.create_user(
+			username="inactivo",
+			email="inactivo@example.com",
+			password="UnaClaveSegura123!",
+			is_active=False,
+		)
+
+		respuesta = self.client.post(
+			reverse("login"),
+			{"username": "inactivo", "password": "UnaClaveSegura123!"},
+			follow=True,
+		)
+
+		self.assertTrue(respuesta.wsgi_request.user.is_authenticated)
+		self.assertEqual(respuesta.status_code, 403)
+		self.assertContains(respuesta, "Tu cuenta no está activa.", status_code=403)
+		self.assertNotContains(respuesta, "Ejercicios")
+
+		respuesta = self.client.get(reverse("ejercicios"))
+
+		self.assertEqual(respuesta.status_code, 403)
+		self.assertContains(respuesta, "Tu cuenta no está activa.", status_code=403)
+
+	def test_registro_publico_crea_cuenta_inactiva(self):
 		respuesta = self.client.post(
 			reverse("register"),
 			{
@@ -143,10 +227,12 @@ class AutenticacionYRutinasTests(TestCase):
 			},
 			follow=True,
 		)
-
-		self.assertTrue(get_user_model().objects.filter(email="nuevo@example.com").exists())
+		cuenta = get_user_model().objects.get(email="nuevo@example.com")
+		self.assertFalse(cuenta.is_active)
 		self.assertTrue(respuesta.wsgi_request.user.is_authenticated)
-		self.assertContains(respuesta, "Perfil no vinculado")
+		self.assertEqual(respuesta.status_code, 403)
+		self.assertContains(respuesta, "Tu cuenta no está activa.", status_code=403)
+		self.assertNotContains(respuesta, "Perfil no vinculado")
 
 	def test_login_fallido_se_registra_en_logs(self):
 		get_user_model().objects.create_user(
@@ -183,7 +269,7 @@ class AutenticacionYRutinasTests(TestCase):
 			email="ines@example.com",
 			password="UnaClaveSegura123!",
 		)
-		perfil = Usuario.objects.create(nombre="Inés", email="ines@example.com", cuenta=cuenta)
+		perfil = vincular_usuario_gimnasio(cuenta, "Inés")
 		entrenamiento = Entrenamiento.objects.create(nombre="Pierna")
 		asignacion = UsuarioEntrenamiento.objects.create(
 			usuario=perfil, entrenamiento=entrenamiento
@@ -251,7 +337,7 @@ class AutenticacionYRutinasTests(TestCase):
 		cuenta = get_user_model().objects.create_user(
 			username="eva@example.com", email="eva@example.com", password="UnaClaveSegura123!"
 		)
-		perfil = Usuario.objects.create(nombre="Eva", email="eva@example.com", cuenta=cuenta)
+		perfil = vincular_usuario_gimnasio(cuenta, "Eva")
 		entrenamiento = Entrenamiento.objects.create(nombre="Rutina falsos")
 		asignacion = UsuarioEntrenamiento.objects.create(
 			usuario=perfil, entrenamiento=entrenamiento
@@ -282,12 +368,23 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertEqual(respuesta.status_code, 200)
 		self.assertContains(respuesta, "Ejercicios guardados")
 		self.assertContains(respuesta, "Remo")
+		self.assertContains(respuesta, "Ya has registrado todos los ejercicios de esta sesión.")
+		self.assertContains(
+			respuesta,
+			reverse("registrar_sesion", args=[asignacion.pk]),
+		)
+
+		respuesta = self.client.get(reverse("registrar_sesion", args=[asignacion.pk]))
+
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(respuesta, "Remo")
+		self.assertNotContains(respuesta, "Ya has registrado todos los ejercicios")
 
 	def test_usuario_puede_editar_rutina(self):
 		cuenta = get_user_model().objects.create_user(
 			username="eva@example.com", email="eva@example.com", password="UnaClaveSegura123!"
 		)
-		perfil = Usuario.objects.create(nombre="Eva", email="eva@example.com", cuenta=cuenta)
+		perfil = vincular_usuario_gimnasio(cuenta, "Eva")
 		entrenamiento = Entrenamiento.objects.create(nombre="Rutina antigua")
 		asignacion = UsuarioEntrenamiento.objects.create(
 			usuario=perfil, entrenamiento=entrenamiento
@@ -309,7 +406,7 @@ class AutenticacionYRutinasTests(TestCase):
 		cuenta = get_user_model().objects.create_user(
 			username="lucia@example.com", email="lucia@example.com", password="UnaClaveSegura123!"
 		)
-		perfil = Usuario.objects.create(nombre="Lucía", email="lucia@example.com", cuenta=cuenta)
+		perfil = vincular_usuario_gimnasio(cuenta, "Lucía")
 		entrenamiento = Entrenamiento.objects.create(nombre="Full body")
 		asignacion = UsuarioEntrenamiento.objects.create(
 			usuario=perfil, entrenamiento=entrenamiento
@@ -368,7 +465,7 @@ class AutenticacionYRutinasTests(TestCase):
 		cuenta = get_user_model().objects.create_user(
 			username="marta@example.com", email="marta@example.com", password="UnaClaveSegura123!"
 		)
-		perfil = Usuario.objects.create(nombre="Marta", email="marta@example.com", cuenta=cuenta)
+		perfil = vincular_usuario_gimnasio(cuenta, "Marta")
 		entrenamiento = Entrenamiento.objects.create(nombre="Bíceps")
 		asignacion = UsuarioEntrenamiento.objects.create(
 			usuario=perfil, entrenamiento=entrenamiento
