@@ -12,7 +12,13 @@ from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 
-from .forms import EmailOrUsernameAuthenticationForm, EjercicioSesionForm, EntrenamientoForm, RegistroForm
+from .forms import (
+	EmailOrUsernameAuthenticationForm,
+	EjercicioForm,
+	EjercicioSesionForm,
+	EntrenamientoForm,
+	RegistroForm,
+)
 from .models import (
 	Entrenamiento,
 	EntrenamientoEjercicio,
@@ -159,10 +165,18 @@ def historial_sesiones(request):
 @login_required
 @active_user_required
 def ejercicios(request):
+	form = EjercicioForm(request.POST or None)
+	if request.method == "POST" and form.is_valid():
+		ejercicio = form.save()
+		messages.success(request, f"{ejercicio.nombre} se añadió al catálogo.")
+		return redirect("ejercicios")
 	return render(
 		request,
 		"tracker/ejercicios.html",
-		{"ejercicios": Ejercicio.objects.filter(activo=True)},
+		{
+			"ejercicios": Ejercicio.objects.filter(activo=True),
+			"form": form,
+		},
 	)
 
 

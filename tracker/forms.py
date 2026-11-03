@@ -125,6 +125,27 @@ class EntrenamientoForm(forms.Form):
 		self.fields["ejercicios"].queryset = Ejercicio.objects.filter(activo=True)
 
 
+class EjercicioForm(forms.ModelForm):
+	class Meta:
+		model = Ejercicio
+		fields = ("nombre", "grupo_muscular", "equipamiento", "descripcion")
+		labels = {
+			"nombre": "Nombre del ejercicio",
+			"grupo_muscular": "Grupo muscular",
+			"equipamiento": "Material",
+			"descripcion": "Indicaciones",
+		}
+		widgets = {
+			"descripcion": forms.Textarea(attrs={"rows": 3}),
+		}
+
+	def clean_nombre(self):
+		nombre = self.cleaned_data["nombre"].strip()
+		if Ejercicio.objects.filter(nombre__iexact=nombre).exists():
+			raise forms.ValidationError("Ya existe un ejercicio con ese nombre.")
+		return nombre
+
+
 class SesionForm(forms.Form):
 	notas = forms.CharField(
 		label="Notas de la sesión",
