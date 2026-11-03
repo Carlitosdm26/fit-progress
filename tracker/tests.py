@@ -141,7 +141,7 @@ class AutenticacionYRutinasTests(TestCase):
 		cuenta = get_user_model().objects.create_user(
 			username="rutina@example.com",
 			email="rutina@example.com",
-			******,
+			password="UnaClaveSegura123!",
 		)
 		perfil = vincular_usuario_gimnasio(cuenta, "Rutina")
 		entrenamiento = Entrenamiento.objects.create(nombre="Rutina existente")
@@ -368,6 +368,17 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertEqual(respuesta.status_code, 200)
 		self.assertContains(respuesta, "Ejercicios guardados")
 		self.assertContains(respuesta, "Remo")
+		self.assertContains(respuesta, "Ya has registrado todos los ejercicios de esta sesión.")
+		self.assertContains(
+			respuesta,
+			reverse("registrar_sesion", args=[asignacion.pk]),
+		)
+
+		respuesta = self.client.get(reverse("registrar_sesion", args=[asignacion.pk]))
+
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(respuesta, "Remo")
+		self.assertNotContains(respuesta, "Ya has registrado todos los ejercicios")
 
 	def test_usuario_puede_editar_rutina(self):
 		cuenta = get_user_model().objects.create_user(
