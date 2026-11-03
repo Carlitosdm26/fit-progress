@@ -1,7 +1,53 @@
 {% extends "tracker/base.html" %}
 {% block title %}Ejercicios | Fit Progress{% endblock %}
 {% block content %}
-<div class="eyebrow">Catálogo disponible</div><h1>Ejercicios</h1>
-<p class="muted">Estos ejercicios están activos y se pueden incluir en tus rutinas.</p>
-<ul>{% for ejercicio in ejercicios %}<li><strong>{{ ejercicio.nombre }}</strong><div class="meta" style="margin-top: 8px;">{{ ejercicio.grupo_muscular }} · {{ ejercicio.equipamiento|default:"Sin equipamiento" }}</div></li>{% empty %}<li class="muted">No hay ejercicios disponibles.</li>{% endfor %}</ul>
+<header class="page-heading">
+	<div>
+		<div class="eyebrow">Biblioteca de movimiento</div>
+		<h1>Ejercicios</h1>
+		<p class="muted">Explora el catálogo común o añade un ejercicio para todos.</p>
+	</div>
+</header>
+<div class="catalog-layout">
+	<section class="panel catalog-panel" aria-labelledby="catalog-title">
+		<div class="section-heading">
+			<div>
+				<div class="eyebrow">{{ ejercicios|length }} movimientos</div>
+				<h2 id="catalog-title">Catálogo</h2>
+			</div>
+		</div>
+		<ul class="exercise-list">
+			{% for ejercicio in ejercicios %}
+			<li class="exercise-card">
+				<span class="exercise-index" aria-hidden="true">{{ forloop.counter|stringformat:"02d" }}</span>
+				<div class="exercise-info">
+					<strong>{{ ejercicio.nombre }}</strong>
+					<div class="meta">{{ ejercicio.grupo_muscular }}{% if ejercicio.equipamiento %} · {{ ejercicio.equipamiento }}{% endif %}</div>
+					{% if ejercicio.descripcion %}<p>{{ ejercicio.descripcion }}</p>{% endif %}
+				</div>
+			</li>
+			{% empty %}
+			<li class="empty-state">Aún no hay ejercicios en el catálogo.</li>
+			{% endfor %}
+		</ul>
+	</section>
+	<aside class="panel add-exercise-panel" aria-labelledby="add-exercise-title">
+		<div class="eyebrow">Aportación abierta</div>
+		<h2 id="add-exercise-title">Añadir ejercicio</h2>
+		<p class="muted">El ejercicio aparecerá en el catálogo compartido y podrá incluirse en cualquier rutina.</p>
+		<form method="post" class="exercise-form">
+			{% csrf_token %}
+			{{ form.non_field_errors }}
+			<label for="{{ form.nombre.id_for_label }}">{{ form.nombre.label }}</label>
+			{{ form.nombre }}{{ form.nombre.errors }}
+			<label for="{{ form.grupo_muscular.id_for_label }}">{{ form.grupo_muscular.label }}</label>
+			{{ form.grupo_muscular }}{{ form.grupo_muscular.errors }}
+			<label for="{{ form.equipamiento.id_for_label }}">{{ form.equipamiento.label }}</label>
+			{{ form.equipamiento }}{{ form.equipamiento.errors }}
+			<label for="{{ form.descripcion.id_for_label }}">{{ form.descripcion.label }}</label>
+			{{ form.descripcion }}{{ form.descripcion.errors }}
+			<button class="button" type="submit">Añadir al catálogo</button>
+		</form>
+	</aside>
+</div>
 {% endblock %}

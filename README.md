@@ -6,7 +6,7 @@ Aplicación web Django para gestionar rutinas de gimnasio y registrar el progres
 
 - Login individual para cada usuario.
 - Registro público con cuentas inactivas hasta que un administrador las active.
-- Catálogo de ejercicios activos, filtrable por grupo muscular.
+- Catálogo compartido de ejercicios, filtrable por grupo muscular y ampliable por cualquier usuario con una cuenta activa.
 - Creación y edición de rutinas.
 - Registro progresivo de una sesión: se guarda un ejercicio cada vez.
 - Número variable de series por ejercicio, con repeticiones y peso decimal en kilogramos.
@@ -99,6 +99,8 @@ Antes de desplegar la migración que unifica las tablas, haz una copia de seguri
 6. Guarda el ejercicio y vuelve a la misma sesión para añadir el siguiente.
 7. Para corregir un ejercicio ya guardado, pulsa `Editar ejercicio`.
 8. Para modificar una rutina o una sesión, entra en su pantalla de edición.
+
+Desde `Ejercicios`, cualquier usuario con sesión iniciada y cuenta activa puede añadir ejercicios al catálogo compartido. Los nombres duplicados no se aceptan.
 
 Ejemplo:
 

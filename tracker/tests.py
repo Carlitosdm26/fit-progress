@@ -209,7 +209,7 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertTrue(respuesta.wsgi_request.user.is_authenticated)
 		self.assertEqual(respuesta.status_code, 403)
 		self.assertContains(respuesta, "Tu cuenta no está activa.", status_code=403)
-		self.assertNotContains(respuesta, "Ejercicios")
+		self.assertNotContains(respuesta, "Ejercicios", status_code=403)
 
 		respuesta = self.client.get(reverse("ejercicios"))
 
@@ -232,7 +232,7 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertTrue(respuesta.wsgi_request.user.is_authenticated)
 		self.assertEqual(respuesta.status_code, 403)
 		self.assertContains(respuesta, "Tu cuenta no está activa.", status_code=403)
-		self.assertNotContains(respuesta, "Perfil no vinculado")
+		self.assertNotContains(respuesta, "Perfil no vinculado", status_code=403)
 
 	def test_login_fallido_se_registra_en_logs(self):
 		get_user_model().objects.create_user(
@@ -262,6 +262,65 @@ class AutenticacionYRutinasTests(TestCase):
 		respuesta = self.client.get(reverse("ejercicios"))
 
 		self.assertRedirects(respuesta, f"{reverse('login')}?next={reverse('ejercicios')}")
+
+	def test_usuario_activo_puede_anadir_ejercicio_desde_el_catalogo(self):
+		cuenta = get_user_model().objects.create_user(
+			username="catalogo@example.com",
+			email="catalogo@example.com",
+			password="UnaClaveSegura123!",
+		)
+		self.client.force_login(cuenta)
+
+		respuesta = self.client.post(
+			reverse("ejercicios"),
+			{
+				"nombre": "Prensa de piernas",
+				"grupo_muscular": "Cuádriceps",
+				"equipamiento": "Máquina de prensa",
+				"descripcion": "3 series de 10 repeticiones.",
+			},
+		)
+
+		ejercicio = Ejercicio.objects.get(nombre="Prensa de piernas")
+		self.assertRedirects(respuesta, reverse("ejercicios"))
+		self.assertTrue(ejercicio.activo)
+		self.assertEqual(ejercicio.grupo_muscular, "Cuádriceps")
+		self.assertEqual(ejercicio.equipamiento, "Máquina de prensa")
+
+	def test_catalogo_rechaza_ejercicio_duplicado_sin_distinguir_mayusculas(self):
+		Ejercicio.objects.create(nombre="Sentadilla libre", grupo_muscular="Cuádriceps")
+		cuenta = get_user_model().objects.create_user(
+			username="duplicado@example.com",
+			email="duplicado@example.com",
+			password="UnaClaveSegura123!",
+		)
+		self.client.force_login(cuenta)
+
+		respuesta = self.client.post(
+			reverse("ejercicios"),
+			{
+				"nombre": "SENTADILLA LIBRE",
+				"grupo_muscular": "Cuádriceps",
+				"equipamiento": "Barra",
+				"descripcion": "3 series de 10.",
+			},
+		)
+
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(respuesta, "Ya existe un ejercicio con ese nombre.")
+		self.assertEqual(Ejercicio.objects.count(), 1)
+
+	def test_comando_importa_ejercicios_de_miercoles_sin_duplicarlos(self):
+		from django.core.management import call_command
+
+		call_command("importar_ejercicios_miercoles", verbosity=0)
+		call_command("importar_ejercicios_miercoles", verbosity=0)
+
+		self.assertEqual(Ejercicio.objects.count(), 6)
+		self.assertEqual(
+			Ejercicio.objects.get(nombre="Plancha frontal").descripcion,
+			"3 series de 45 segundos.",
+		)
 
 	def test_usuario_puede_registrar_repeticiones_y_peso(self):
 		cuenta = get_user_model().objects.create_user(
