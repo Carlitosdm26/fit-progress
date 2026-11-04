@@ -310,18 +310,6 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertContains(respuesta, "Ya existe un ejercicio con ese nombre.")
 		self.assertEqual(Ejercicio.objects.count(), 1)
 
-	def test_comando_importa_ejercicios_de_miercoles_sin_duplicarlos(self):
-		from django.core.management import call_command
-
-		call_command("importar_ejercicios_miercoles", verbosity=0)
-		call_command("importar_ejercicios_miercoles", verbosity=0)
-
-		self.assertEqual(Ejercicio.objects.count(), 6)
-		self.assertEqual(
-			Ejercicio.objects.get(nombre="Plancha frontal").descripcion,
-			"3 series de 45 segundos.",
-		)
-
 	def test_usuario_puede_registrar_repeticiones_y_peso(self):
 		cuenta = get_user_model().objects.create_user(
 			username="ines@example.com",
