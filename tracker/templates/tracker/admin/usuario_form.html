@@ -1,0 +1,23 @@
+{% extends "tracker/admin/base.html" %}
+{% block title %}{% if nuevo %}Crear usuario{% else %}Editar {{ usuario.username }}{% endif %} | Administración{% endblock %}
+{% block content %}
+<div class="heading"><div><div class="eyebrow">Gestión de cuentas</div><h1>{% if nuevo %}Nueva cuenta{% else %}Editar cuenta{% endif %}</h1><p>{% if nuevo %}Registra una cuenta y configura su acceso.{% else %}Actualiza los datos y permisos de {{ usuario.username }}.{% endif %}</p></div><a class="button secondary" href="{% url 'panel_admin:usuarios' %}">Volver a usuarios</a></div>
+<form method="post" novalidate>{% csrf_token %}{{ form.non_field_errors }}
+    <div class="form-layout">
+        <section class="form-section"><h2>Datos de cuenta</h2><div class="form-fields">
+            {% for field in form %}
+                {% if field.name == "is_active" or field.name == "is_staff" or field.name == "is_superuser" %}
+                {% elif field.name == "groups" %}
+                    <div class="field wide"><label>{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="errors">{{ field.errors }}</div>{% endif %}</div>
+                {% else %}
+                    <div class="field{% if field.name == 'password1' or field.name == 'password2' %} wide{% endif %}"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<p class="help">{{ field.help_text }}</p>{% endif %}{% if field.errors %}<div class="errors">{{ field.errors }}</div>{% endif %}</div>
+                {% endif %}
+            {% endfor %}
+        </div></section>
+        <aside class="form-section"><h2>Permisos</h2><div class="flags">
+            {% for field in form %}{% if field.name == "is_active" or field.name == "is_staff" or field.name == "is_superuser" %}<label class="flag">{{ field }}<span>{{ field.label }}</span></label>{% if field.errors %}<div class="errors">{{ field.errors }}</div>{% endif %}{% endif %}{% endfor %}
+        </div><p class="help">El acceso al panel solo se concede a cuentas activas con permisos de staff.</p></aside>
+    </div>
+    <div class="form-actions"><button class="button" type="submit">{% if nuevo %}Crear cuenta{% else %}Guardar cambios{% endif %}</button><a class="button secondary" href="{% url 'panel_admin:usuarios' %}">Cancelar</a></div>
+</form>
+{% endblock %}

@@ -109,7 +109,7 @@ class AutenticacionYRutinasTests(TestCase):
 		self.client.force_login(admin_user)
 
 		respuesta = self.client.get(
-			reverse("admin:tracker_usuario_change", args=[user.pk])
+			reverse("panel_admin:usuario_editar", args=[user.pk])
 		)
 
 		self.assertEqual(respuesta.status_code, 200)
@@ -117,10 +117,125 @@ class AutenticacionYRutinasTests(TestCase):
 
 		PerfilUsuario.objects.create(usuario=user, descripcion="Perfil de prueba")
 		respuesta = self.client.get(
-			reverse("admin:tracker_usuario_change", args=[user.pk])
+			reverse("panel_admin:usuario_editar", args=[user.pk])
 		)
 		self.assertEqual(respuesta.status_code, 200)
-		self.assertContains(respuesta, "Perfil de prueba")
+		self.assertContains(respuesta, "usuario@example.com")
+
+	def test_panel_admin_requires_staff(self):
+		url = reverse("panel_admin:inicio")
+		respuesta = self.client.get(url)
+		self.assertRedirects(respuesta, f"{reverse('login')}?next={url}")
+
+		cuenta = get_user_model().objects.create_user(
+			username="cuenta",
+			email="cuenta@example.com",
+			password="UnaClaveSegura123!",
+		)
+		self.client.force_login(cuenta)
+		respuesta = self.client.get(url)
+		self.assertRedirects(respuesta, reverse("inicio"))
+
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="UnaClaveSegura123!",
+		)
+		self.client.force_login(admin_user)
+		respuesta = self.client.get(url)
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(respuesta, "Cuentas registradas")
+
+	def test_login_retorna_al_panel_solicitado(self):
+		cuenta = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="UnaClaveSegura123!",
+		)
+		respuesta = self.client.post(
+			reverse("login"),
+			{
+				"username": cuenta.username,
+				"password": "UnaClaveSegura123!",
+				"next": reverse("panel_admin:inicio"),
+			},
+		)
+		self.assertRedirects(respuesta, reverse("panel_admin:inicio"))
+
+	def test_panel_admin_busca_y_crea_usuarios(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="UnaClaveSegura123!",
+		)
+		get_user_model().objects.create_user(
+			username="maratonista",
+			email="runner@example.com",
+			password="UnaClaveSegura123!",
+		)
+		get_user_model().objects.create_user(
+			username="ciclista",
+			email="bike@example.com",
+			password="UnaClaveSegura123!",
+		)
+		self.client.force_login(admin_user)
+
+		respuesta = self.client.get(reverse("panel_admin:usuarios"), {"q": "runner"})
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(respuesta, "maratonista")
+		self.assertNotContains(respuesta, "ciclista")
+
+		respuesta = self.client.post(
+			reverse("panel_admin:usuario_nuevo"),
+			{
+				"username": "nueva-cuenta",
+				"email": "nuevo@example.com",
+				"is_active": "on",
+				"password1": "jR9!wV4#qT8@zK2",
+				"password2": "jR9!wV4#qT8@zK2",
+			},
+		)
+		cuenta = get_user_model().objects.get(username="nueva-cuenta")
+		self.assertRedirects(
+			respuesta, reverse("panel_admin:usuario_editar", args=[cuenta.pk])
+		)
+		self.assertTrue(cuenta.check_password("jR9!wV4#qT8@zK2"))
+
+	def test_panel_admin_edita_usuario_sin_perder_sus_rutinas(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="UnaClaveSegura123!",
+		)
+		user = get_user_model().objects.create_user(
+			username="usuario",
+			email="usuario@example.com",
+			password="UnaClaveSegura123!",
+		)
+		entrenamiento = Entrenamiento.objects.create(nombre="Rutina vinculada")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=user, entrenamiento=entrenamiento
+		)
+		self.client.force_login(admin_user)
+
+		respuesta = self.client.post(
+			reverse("panel_admin:usuario_editar", args=[user.pk]),
+			{
+				"username": "usuario-editado",
+				"email": "editado@example.com",
+				"is_active": "on",
+				"password1": "nQ7!xL4#vB9@zC2",
+				"password2": "nQ7!xL4#vB9@zC2",
+			},
+		)
+
+		self.assertRedirects(
+			respuesta, reverse("panel_admin:usuario_editar", args=[user.pk])
+		)
+		user.refresh_from_db()
+		self.assertEqual(user.username, "usuario-editado")
+		self.assertTrue(user.check_password("nQ7!xL4#vB9@zC2"))
+		self.assertTrue(UsuarioEntrenamiento.objects.filter(pk=asignacion.pk, usuario=user).exists())
 
 
 class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
@@ -144,7 +259,7 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 		)
 		self.client.force_login(admin_user)
 		self.client.raise_request_exception = False
-		change_url = reverse("admin:tracker_usuario_change", args=[user.pk])
+		change_url = reverse("panel_admin:usuario_editar", args=[user.pk])
 
 		with connection.schema_editor() as schema_editor:
 			schema_editor.delete_model(profile_model)

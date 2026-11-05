@@ -4,6 +4,9 @@ from decimal import Decimal
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.models import Group
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
 from .models import Ejercicio, UsuarioEntrenamientoEjercicio
@@ -99,6 +102,127 @@ class RegistroForm(UserCreationForm):
 		self.fields["password1"].error_messages["required"] = "Este campo es obligatorio."
 		self.fields["password2"].error_messages["required"] = "Este campo es obligatorio."
 		self.fields["password2"].error_messages["password_mismatch"] = "Las contraseñas no coinciden."
+
+
+class AdminUsuarioCreationForm(UserCreationForm):
+	email = forms.EmailField(label="Email")
+	is_active = forms.BooleanField(label="Cuenta activa", initial=True, required=False)
+	is_staff = forms.BooleanField(label="Acceso al panel", required=False)
+	is_superuser = forms.BooleanField(label="Permisos totales", required=False)
+	groups = forms.ModelMultipleChoiceField(
+		label="Grupos",
+		queryset=Group.objects.all(),
+		required=False,
+		widget=forms.CheckboxSelectMultiple,
+	)
+
+	class Meta(UserCreationForm.Meta):
+		model = get_user_model()
+		fields = ("username", "email", "is_active", "is_staff", "is_superuser", "groups")
+		labels = {
+			"username": "Nombre de usuario",
+			"email": "Email",
+			"is_active": "Cuenta activa",
+			"is_staff": "Acceso al panel",
+			"is_superuser": "Permisos totales",
+			"groups": "Grupos",
+		}
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.fields["password1"].label = "Contraseña"
+		self.fields["password2"].label = "Repetir contraseña"
+
+	def clean_email(self):
+		email = self.cleaned_data["email"].strip()
+		if get_user_model().objects.filter(email__iexact=email).exists():
+			raise forms.ValidationError("Ya existe una cuenta con ese email.")
+		return email
+
+	def clean(self):
+		cleaned_data = super().clean()
+		if cleaned_data.get("is_superuser") and not cleaned_data.get("is_staff"):
+			self.add_error("is_staff", "Un superusuario también necesita acceso al panel.")
+		return cleaned_data
+
+
+class AdminUsuarioUpdateForm(forms.ModelForm):
+	password1 = forms.CharField(
+		label="Nueva contraseña",
+		required=False,
+		widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+	)
+	password2 = forms.CharField(
+		label="Repetir contraseña",
+		required=False,
+		widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+	)
+	groups = forms.ModelMultipleChoiceField(
+		label="Grupos",
+		queryset=Group.objects.all(),
+		required=False,
+		widget=forms.CheckboxSelectMultiple,
+	)
+
+	class Meta:
+		model = get_user_model()
+		fields = ("username", "email", "is_active", "is_staff", "is_superuser", "groups")
+		labels = {
+			"username": "Nombre de usuario",
+			"email": "Email",
+			"is_active": "Cuenta activa",
+			"is_staff": "Acceso al panel",
+			"is_superuser": "Permisos totales",
+		}
+
+	def clean_email(self):
+		email = self.cleaned_data["email"].strip()
+		duplicates = get_user_model().objects.filter(email__iexact=email).exclude(pk=self.instance.pk)
+		if duplicates.exists():
+			raise forms.ValidationError("Ya existe una cuenta con ese email.")
+		return email
+
+	def clean(self):
+		cleaned_data = super().clean()
+		password1 = cleaned_data.get("password1")
+		password2 = cleaned_data.get("password2")
+		if password1 or password2:
+			if password1 != password2:
+				self.add_error("password2", "Las contraseñas no coinciden.")
+			elif password1:
+				try:
+					validate_password(password1, self.instance)
+				except ValidationError as error:
+					self.add_error("password1", error)
+		if cleaned_data.get("is_superuser") and not cleaned_data.get("is_staff"):
+			self.add_error("is_staff", "Un superusuario también necesita acceso al panel.")
+
+		was_last_active_superuser = (
+			self.instance.pk
+			and self.instance.is_active
+			and self.instance.is_staff
+			and self.instance.is_superuser
+			and not (
+				cleaned_data.get("is_active")
+				and cleaned_data.get("is_staff")
+				and cleaned_data.get("is_superuser")
+			)
+			and not get_user_model().objects.filter(
+				is_active=True, is_staff=True, is_superuser=True
+			).exclude(pk=self.instance.pk).exists()
+		)
+		if was_last_active_superuser:
+			self.add_error(None, "No se puede quitar el acceso al último superusuario activo.")
+		return cleaned_data
+
+	def save(self, commit=True):
+		usuario = super().save(commit=False)
+		if self.cleaned_data.get("password1"):
+			usuario.set_password(self.cleaned_data["password1"])
+		if commit:
+			usuario.save()
+			self.save_m2m()
+		return usuario
 
 
 class EntrenamientoForm(forms.Form):

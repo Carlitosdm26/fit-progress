@@ -9,6 +9,8 @@ from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import redirect, render
+from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 
@@ -55,9 +57,16 @@ def active_user_required(view_func):
 
 def login_view(request):
 	client_ip = get_client_ip(request)
+	redirect_to = request.POST.get("next") or request.GET.get("next")
+	if not url_has_allowed_host_and_scheme(
+		redirect_to,
+		allowed_hosts={request.get_host()},
+		require_https=request.is_secure(),
+	):
+		redirect_to = None
 	if request.user.is_authenticated:
 		logger.debug("Usuario ya autenticado, redirigiendo al inicio. user=%s ip=%s", request.user.username, client_ip)
-		return redirect("inicio")
+		return redirect(redirect_to or "inicio")
 	form = EmailOrUsernameAuthenticationForm(request, data=request.POST or None)
 	if request.method == "POST":
 		logger.debug("Intento de login para username=%s ip=%s", request.POST.get("username"), client_ip)
@@ -66,7 +75,7 @@ def login_view(request):
 		login(request, user)
 		logger.info("Usuario %s ha iniciado sesión.", user.username)
 		logger.debug("Login correcto. user=%s email=%s ip=%s request_path=%s", user.username, user.email, client_ip, request.path)
-		return redirect("inicio")
+		return redirect(redirect_to or "inicio")
 	if request.method == "GET":
 		logger.debug("Acceso a la página de login. ip=%s", client_ip)
 	return render(request, "tracker/login.html", {"form": form})
