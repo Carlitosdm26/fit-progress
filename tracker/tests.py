@@ -161,6 +161,15 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertContains(respuesta, "Cuentas registradas")
 		self.assertContains(respuesta, "Abrir menú de administración")
 		self.assertContains(respuesta, "Volver a la app")
+		self.assertContains(respuesta, ".menu-toggle { display: block; }")
+		self.assertContains(
+			respuesta, '<path d="M3 6h18M3 12h18M3 18h18"></path>'
+		)
+		html = respuesta.content.decode()
+		self.assertLess(
+			html.index('<header class="topline">'),
+			html.index('<button class="menu-toggle"'),
+		)
 
 	def test_staff_no_puede_conceder_privilegios_ni_editar_superusuarios(self):
 		staff_user = get_user_model().objects.create_user(
