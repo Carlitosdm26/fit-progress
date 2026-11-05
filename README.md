@@ -91,7 +91,7 @@ Antes de desplegar la migración que unifica las tablas, haz una copia de seguri
 
 ## Administración de rutinas y actividad
 
-En `/admin/`, el panel de operaciones permite buscar y editar usuarios, el catálogo de ejercicios, las rutinas y las sesiones. Desde la ficha de un usuario se consultan sus rutinas y sus diez sesiones más recientes; desde una rutina se ven los usuarios asignados y se pueden abrir sus sesiones. El listado de sesiones se puede filtrar por usuario y por rutina para localizar cualquier registro.
+En `/admin/`, el panel de operaciones permite buscar usuarios, editar el catálogo de ejercicios, las rutinas y las sesiones. La acción `Ver` abre la ficha de solo lectura de cada usuario, con sus rutinas y sus diez sesiones más recientes; la edición de cuenta queda como acción aparte. Desde una rutina se ven los usuarios asignados y se pueden abrir sus sesiones. El listado de sesiones se puede filtrar por usuario y por rutina para localizar cualquier registro. En móvil, el menú se abre con el botón de tres líneas y la barra superior incluye un acceso de vuelta a la aplicación.
 
 Las rutinas permiten asignarse y desasignarse de usuarios activos y ordenar sus ejercicios. Desasignar una rutina la oculta de la cuenta del usuario, pero conserva sus sesiones e historial; volver a asignarla reactiva la vinculación existente. Al añadir un ejercicio a una rutina, también se incorpora a las selecciones de sus usuarios asignados. En una sesión se pueden corregir la fecha y las notas, y añadir o editar series. Los ejercicios del catálogo se pueden pausar sin borrar el historial asociado.
 

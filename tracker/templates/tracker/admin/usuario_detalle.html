@@ -1,0 +1,26 @@
+{% extends "tracker/admin/base.html" %}
+{% block title %}{{ usuario.username }} | Administración{% endblock %}
+{% block content %}
+<div class="heading"><div><div class="eyebrow"><a class="row-link" href="{% url 'panel_admin:usuarios' %}">Usuarios</a> / Ficha</div><h1>{{ usuario.username }}</h1><p>Resumen de la cuenta, sus rutinas y su actividad reciente.</p></div><div class="form-actions"><a class="button secondary" href="{% url 'panel_admin:usuarios' %}">Volver a usuarios</a><a class="button" href="{% url 'panel_admin:usuario_editar' usuario.pk %}">Editar usuario</a></div></div>
+<section class="detail-grid">
+    <div class="form-section"><h2>Cuenta</h2><dl class="account-details">
+        <div><dt>Email</dt><dd>{{ usuario.email|default:"—" }}</dd></div>
+        <div><dt>Estado</dt><dd><span class="status {% if usuario.is_active %}active{% endif %}">{% if usuario.is_active %}Activa{% else %}Inactiva{% endif %}</span></dd></div>
+        <div><dt>Acceso</dt><dd>{% if usuario.is_superuser %}Superusuario{% elif usuario.is_staff %}Staff{% else %}Usuario{% endif %}</dd></div>
+        <div><dt>Fecha de alta</dt><dd>{{ usuario.date_joined|date:"d/m/Y H:i" }}</dd></div>
+    </dl></div>
+    <section class="form-section">
+        <div class="section-head"><h2>Rutinas</h2><span class="metric-label">{{ rutinas_usuario|length }} vínculos</span></div>
+        {% for asignacion in rutinas_usuario %}
+        <div class="relation-line"><div><a class="row-link" href="{% url 'panel_admin:entrenamiento_detalle' asignacion.entrenamiento_id %}">{{ asignacion.entrenamiento.nombre }}</a><div class="help"><span class="status {% if asignacion.activa %}active{% endif %}">{% if asignacion.activa %}Asignada{% else %}Desasignada{% endif %}</span> · {{ asignacion.sesiones_count }} sesiones</div></div><a class="row-link" href="{% url 'panel_admin:sesiones' %}?usuario={{ usuario.pk }}&rutina={{ asignacion.entrenamiento_id }}">Ver sesiones</a></div>
+        {% empty %}<p class="empty">Este usuario todavía no tiene rutinas.</p>{% endfor %}
+    </section>
+</section>
+<section class="form-section" style="margin-top: 20px">
+    <div class="section-head"><h2>Actividad reciente</h2><a class="row-link" href="{% url 'panel_admin:sesiones' %}?usuario={{ usuario.pk }}">Ver todas las sesiones</a></div>
+    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Rutina</th><th>Series</th><th></th></tr></thead><tbody>
+    {% for sesion in sesiones_usuario %}<tr><td>{{ sesion.fecha|date:"d/m/Y H:i" }}</td><td><a class="row-link" href="{% url 'panel_admin:entrenamiento_detalle' sesion.usuario_entrenamiento.entrenamiento_id %}">{{ sesion.usuario_entrenamiento.entrenamiento.nombre }}</a></td><td>{{ sesion.series_count }}</td><td><a class="row-link" href="{% url 'panel_admin:sesion_detalle' sesion.pk %}">Ver sesión</a></td></tr>
+    {% empty %}<tr><td class="empty" colspan="4">Este usuario todavía no tiene sesiones.</td></tr>{% endfor %}
+    </tbody></table></div>
+</section>
+{% endblock %}
