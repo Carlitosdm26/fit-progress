@@ -5,7 +5,7 @@ Aplicación web Django para gestionar rutinas de gimnasio y registrar el progres
 ## Funcionalidades
 
 - Login individual para cada usuario.
-- Registro público con cuentas activas al completar el registro.
+- Registro público con cuentas inactivas hasta que un administrador las active.
 - Catálogo compartido de ejercicios, filtrable por grupo muscular y ampliable por cualquier usuario con una cuenta activa.
 - Creación y edición de rutinas.
 - Registro progresivo de una sesión: se guarda un ejercicio cada vez.
@@ -73,9 +73,9 @@ Direcciones locales:
 
 ## Gestión de cuentas
 
-El registro público crea cuentas activas, que pueden usar la aplicación inmediatamente. Desde `/admin/`, los administradores pueden añadir una descripción a cada usuario para identificarlo.
+El registro público crea cuentas inactivas. Los usuarios pueden iniciar sesión, pero solo verán un aviso hasta que un administrador active sus cuentas desde `/admin/`.
 
-Los administradores también pueden crear cuentas desde `Tracker > Usuarios` y decidir si deben estar activas.
+Los administradores también pueden crear cuentas directamente desde `Auth > Users` y decidir si deben estar activas.
 
 Si todavía no existe un superusuario:
 
@@ -83,13 +83,11 @@ Si todavía no existe un superusuario:
 .venv/bin/python manage.py createsuperuser
 ```
 
-Después, crea el usuario en `Tracker > Usuarios` desde `/admin/`, indicando su usuario, email y, opcionalmente, una descripción. La cuenta comparte la tabla de autenticación de Django para conservar relaciones y sesiones existentes.
+Después, crea el usuario en `Auth > Users` desde `/admin/`, indicando su nombre y email. La cuenta de Django guarda tanto los datos de acceso como el perfil deportivo; no hace falta asignar un grupo ni crear o vincular un registro separado en `Tracker > Usuarios`.
 
-Si una cuenta se marca manualmente como inactiva desde `/admin/`, podrá iniciar sesión, pero solo verá un aviso para contactar con un administrador y no podrá acceder a las páginas de la aplicación.
+Las cuentas inactivas pueden iniciar sesión, pero solo verán un aviso para contactar con un administrador; no podrán acceder a las páginas de la aplicación hasta que se active su cuenta.
 
-Una instalación nueva usa `0001_squashed_initial`, que crea directamente el esquema final sin la tabla heredada de perfiles ni columnas de nombre/apellidos. Una base existente con las migraciones antiguas ejecuta `0004_update_existing_schema`: conserva la tabla y los IDs de usuarios, grupos y permisos, añade la descripción de usuario, archiva los valores de `notas` retirados y elimina esas columnas y las de nombre/apellidos. Las notas y filas de sesiones/series activas se conservan.
-
-Haz una copia de seguridad antes de desplegar en producción. No borres `0004_update_existing_schema.py` después de ejecutarla: Django necesita ese historial para reconocer el esquema. Mantén también las migraciones antiguas que aparecen en `replaces` hasta que todos los entornos existentes hayan actualizado; después se pueden retirar siguiendo el procedimiento de squash de Django, sin eliminar la migración inicial consolidada ni el historial de transición.
+Antes de desplegar la migración que unifica las tablas, haz una copia de seguridad de la base de datos. Los perfiles sin cuenta vinculada se convierten en cuentas con contraseña no utilizable; el superusuario deberá establecerles una contraseña desde el panel de administración.
 
 ## Flujo de usuario
 
@@ -127,9 +125,7 @@ Las acciones de borrado se realizan mediante `POST` y requieren autenticación. 
 
 ## Modelo principal
 
-- `Usuario` de Fit Progress: nombre de usuario, email, contraseña y permisos, sin nombre ni apellidos.
-- `PerfilUsuario`: descripción interna para identificar al usuario desde el panel de administración.
-- `DatoArchivado`: valores de campos retirados, conservados para no perder datos.
+- `User` de Django: datos de acceso y perfil deportivo en una sola cuenta.
 - `Entrenamiento`: rutina reutilizable.
 - `Ejercicio`: catálogo de ejercicios.
 - `UsuarioEntrenamiento`: asignación de una rutina a un usuario.

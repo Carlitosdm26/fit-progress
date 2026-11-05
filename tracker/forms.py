@@ -63,7 +63,6 @@ class RegistroForm(UserCreationForm):
 	email = forms.EmailField(label="Email", required=True)
 
 	class Meta(UserCreationForm.Meta):
-		model = get_user_model()
 		fields = ("username", "email")
 		labels = {
 			"username": "Nombre de usuario",
@@ -77,6 +76,13 @@ class RegistroForm(UserCreationForm):
 			"username": {"required": "Este campo es obligatorio."},
 			"email": {"required": "Este campo es obligatorio."},
 		}
+
+	def save(self, commit=True):
+		user = super().save(commit=False)
+		user.is_active = False
+		if commit:
+			user.save()
+		return user
 
 	def clean_email(self):
 		email = self.cleaned_data["email"].strip()
