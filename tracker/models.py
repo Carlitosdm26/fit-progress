@@ -1,99 +1,12 @@
 from django.conf import settings
-from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
-from django.contrib.auth.models import Group, Permission, PermissionsMixin
 from django.core.validators import MinValueValidator
 from django.db import models
-from django.utils import timezone
-
-
-class UsuarioManager(BaseUserManager):
-	use_in_migrations = True
-
-	def create_user(self, username, email="", password=None, **extra_fields):
-		if not username:
-			raise ValueError("El nombre de usuario es obligatorio.")
-		user = self.model(
-			username=username,
-			email=self.normalize_email(email),
-			**extra_fields,
-		)
-		user.set_password(password)
-		user.save(using=self._db)
-		return user
-
-	def create_superuser(self, username, email="", password=None, **extra_fields):
-		extra_fields.setdefault("is_staff", True)
-		extra_fields.setdefault("is_superuser", True)
-		extra_fields.setdefault("is_active", True)
-		if not extra_fields["is_staff"] or not extra_fields["is_superuser"]:
-			raise ValueError("El superusuario debe tener permisos de administración.")
-		return self.create_user(username, email, password, **extra_fields)
-
-
-class Usuario(AbstractBaseUser, PermissionsMixin):
-	id = models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")
-	username = models.CharField(max_length=150, unique=True)
-	email = models.EmailField(blank=True)
-	is_staff = models.BooleanField(default=False)
-	is_active = models.BooleanField(default=True)
-	date_joined = models.DateTimeField(default=timezone.now)
-	groups = models.ManyToManyField(
-		Group,
-		blank=True,
-		db_table="auth_user_groups",
-		related_name="user_set",
-		related_query_name="user",
-	)
-	user_permissions = models.ManyToManyField(
-		Permission,
-		blank=True,
-		db_table="auth_user_user_permissions",
-		related_name="user_set",
-		related_query_name="user",
-	)
-	objects = UsuarioManager()
-
-	USERNAME_FIELD = "username"
-	REQUIRED_FIELDS = ["email"]
-
-	def __str__(self):
-		return self.username
-
-	class Meta:
-		db_table = "auth_user"
-
-
-class DatoArchivado(models.Model):
-	modelo = models.CharField(max_length=100)
-	registro_id = models.PositiveBigIntegerField()
-	campo = models.CharField(max_length=100)
-	valor = models.TextField()
-
-	class Meta:
-		constraints = [
-			models.UniqueConstraint(
-				fields=["modelo", "registro_id", "campo"],
-				name="unique_dato_archivado",
-			)
-		]
-		ordering = ["modelo", "registro_id", "campo"]
-
-
-class PerfilUsuario(models.Model):
-	usuario = models.OneToOneField(
-		settings.AUTH_USER_MODEL,
-		on_delete=models.CASCADE,
-		related_name="perfil_admin",
-	)
-	descripcion = models.TextField("Descripción", blank=True)
-
-	def __str__(self):
-		return f"Perfil de {self.usuario.username}"
 
 
 class Entrenamiento(models.Model):
 	nombre = models.CharField(max_length=120)
 	descripcion = models.TextField(blank=True)
+	notas = models.TextField(blank=True)
 	fecha_creacion = models.DateTimeField(auto_now_add=True)
 
 	class Meta:
@@ -152,6 +65,7 @@ class EntrenamientoEjercicio(models.Model):
 		Ejercicio, on_delete=models.PROTECT, related_name="entrenamientos"
 	)
 	orden = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+	notas = models.TextField(blank=True)
 
 	class Meta:
 		ordering = ["orden"]
@@ -176,6 +90,7 @@ class UsuarioEntrenamientoEjercicio(models.Model):
 	entrenamiento_ejercicio = models.ForeignKey(
 		EntrenamientoEjercicio, on_delete=models.PROTECT, related_name="elecciones"
 	)
+	notas = models.TextField(blank=True)
 
 	class Meta:
 		constraints = [
@@ -220,6 +135,7 @@ class Serie(models.Model):
 	peso = models.DecimalField(
 		max_digits=7, decimal_places=2, validators=[MinValueValidator(0)]
 	)
+	notas = models.TextField(blank=True)
 
 	class Meta:
 		ordering = ["numero_serie"]

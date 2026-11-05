@@ -63,7 +63,6 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 LOGIN_URL = "/login/"
-AUTH_USER_MODEL = "tracker.Usuario"
 AUTHENTICATION_BACKENDS = ["tracker.auth_backends.AllowInactiveModelBackend"]
 
 TEMPLATES = [
