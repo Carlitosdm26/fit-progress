@@ -8,13 +8,14 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Prefetch, Q
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 
 from .forms import (
+	AgregarEjercicioARutinaForm,
 	EmailOrUsernameAuthenticationForm,
 	EjercicioForm,
 	EjercicioSesionForm,
@@ -185,19 +186,93 @@ def historial_sesiones(request):
 @login_required
 @active_user_required
 def ejercicios(request):
+	perfil = perfil_actual(request)
 	form = EjercicioForm(request.POST or None)
 	if request.method == "POST" and form.is_valid():
 		ejercicio = form.save()
 		messages.success(request, f"{ejercicio.nombre} se añadió al catálogo.")
 		return redirect("ejercicios")
+	asignaciones = list(
+		UsuarioEntrenamiento.objects.filter(usuario=perfil, activa=True)
+		.select_related("entrenamiento")
+		.prefetch_related(
+			"ejercicios_elegidos__entrenamiento_ejercicio"
+		)
+		.order_by("entrenamiento__nombre")
+	)
+	ejercicios = list(Ejercicio.objects.filter(activo=True))
+	ejercicios_por_asignacion = {
+		asignacion.pk: {
+			seleccion.entrenamiento_ejercicio.ejercicio_id
+			for seleccion in asignacion.ejercicios_elegidos.all()
+		}
+		for asignacion in asignaciones
+	}
+	for ejercicio in ejercicios:
+		ejercicio.rutinas_disponibles = [
+			asignacion
+			for asignacion in asignaciones
+			if ejercicio.pk not in ejercicios_por_asignacion[asignacion.pk]
+		]
 	return render(
 		request,
 		"tracker/ejercicios.html",
 		{
-			"ejercicios": Ejercicio.objects.filter(activo=True),
+			"ejercicios": ejercicios,
+			"asignaciones": asignaciones,
 			"form": form,
 		},
 	)
+
+
+@login_required
+@active_user_required
+@require_POST
+def ejercicio_anadir_a_rutina(request, ejercicio_id):
+	perfil = perfil_actual(request)
+	ejercicio = get_object_or_404(Ejercicio, pk=ejercicio_id, activo=True)
+	form = AgregarEjercicioARutinaForm(perfil, request.POST)
+	if not form.is_valid():
+		messages.error(request, "Selecciona una de tus rutinas activas para añadir el ejercicio.")
+		return redirect("ejercicios")
+	asignacion = form.cleaned_data["asignacion"]
+	with transaction.atomic():
+		asignacion = UsuarioEntrenamiento.objects.select_for_update().filter(
+			pk=asignacion.pk, usuario=perfil, activa=True
+		).first()
+		if asignacion is None:
+			messages.error(request, "Esa rutina ya no está disponible.")
+			return redirect("ejercicios")
+		entrenamiento = Entrenamiento.objects.select_for_update().get(
+			pk=asignacion.entrenamiento_id
+		)
+		entrada = EntrenamientoEjercicio.objects.filter(
+			entrenamiento=entrenamiento, ejercicio=ejercicio
+		).first()
+		if entrada is None:
+			ultimo_orden = entrenamiento.ejercicios.order_by("-orden").values_list(
+				"orden", flat=True
+			).first() or 0
+			entrada = EntrenamientoEjercicio.objects.create(
+				entrenamiento=entrenamiento,
+				ejercicio=ejercicio,
+				orden=ultimo_orden + 1,
+			)
+		creada = False
+		for otra_asignacion in UsuarioEntrenamiento.objects.filter(
+			entrenamiento=entrenamiento
+		):
+			_, seleccion_creada = UsuarioEntrenamientoEjercicio.objects.get_or_create(
+				usuario_entrenamiento=otra_asignacion,
+				entrenamiento_ejercicio=entrada,
+			)
+			if otra_asignacion.pk == asignacion.pk:
+				creada = seleccion_creada
+	if creada:
+		messages.success(request, f"{ejercicio.nombre} se añadió a {entrenamiento.nombre}.")
+	else:
+		messages.info(request, f"{ejercicio.nombre} ya está en {entrenamiento.nombre}.")
+	return redirect("ejercicios")
 
 
 @login_required
