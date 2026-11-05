@@ -457,6 +457,98 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertEqual(respuesta.context["series_count"], 2)
 		self.assertEqual(len(respuesta.context["series_por_ejercicio"][0]["series"]), 2)
 		self.assertTrue(Serie.objects.filter(pk=segunda_serie.pk).exists())
+		self.assertContains(respuesta, "Eliminar")
+
+		respuesta = self.client.post(
+			reverse("panel_admin:serie_eliminar", args=[sesion.pk, segunda_serie.pk])
+		)
+		self.assertRedirects(
+			respuesta, reverse("panel_admin:sesion_detalle", args=[sesion.pk])
+		)
+		self.assertFalse(Serie.objects.filter(pk=segunda_serie.pk).exists())
+		self.assertEqual(
+			list(sesion.series.values_list("numero_serie", flat=True)), [1]
+		)
+
+	def test_usuario_puede_eliminar_una_serie_y_las_series_se_reenumeran(self):
+		usuario = get_user_model().objects.create_user(
+			username="series@example.com",
+			email="series@example.com",
+			password="UnaClaveSegura123!",
+		)
+		otro_usuario = get_user_model().objects.create_user(
+			username="otro-series@example.com",
+			email="otro-series@example.com",
+			password="UnaClaveSegura123!",
+		)
+		entrenamiento = Entrenamiento.objects.create(nombre="Torso")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=usuario, entrenamiento=entrenamiento
+		)
+		ejercicio = Ejercicio.objects.create(nombre="Press banca", grupo_muscular="Pecho")
+		entrada = EntrenamientoEjercicio.objects.create(
+			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion, entrenamiento_ejercicio=entrada
+		)
+		sesion = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion, fecha=timezone.now()
+		)
+		series = [
+			Serie.objects.create(
+				sesion_entrenamiento=sesion,
+				usuario_entrenamiento_ejercicio=seleccion,
+				numero_serie=numero,
+				repeticiones=10 - numero,
+				peso=Decimal("50.00") + numero,
+			)
+			for numero in range(1, 4)
+		]
+
+		otra_asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=otro_usuario, entrenamiento=entrenamiento
+		)
+		otra_entrada = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=otra_asignacion,
+			entrenamiento_ejercicio=entrada,
+		)
+		otra_sesion = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=otra_asignacion, fecha=timezone.now()
+		)
+		serie_ajena = Serie.objects.create(
+			sesion_entrenamiento=otra_sesion,
+			usuario_entrenamiento_ejercicio=otra_entrada,
+			numero_serie=1,
+			repeticiones=8,
+			peso=Decimal("60.00"),
+		)
+		self.client.force_login(usuario)
+
+		respuesta = self.client.get(reverse("historial_sesiones"))
+		self.assertContains(respuesta, "Press banca")
+		self.assertContains(respuesta, "Serie 1")
+		self.assertContains(respuesta, "Serie 2")
+		self.assertContains(respuesta, "Serie 3")
+
+		respuesta = self.client.post(
+			reverse("eliminar_serie_sesion", args=[sesion.pk, series[1].pk])
+		)
+		self.assertRedirects(respuesta, reverse("editar_sesion", args=[sesion.pk]))
+		self.assertEqual(
+			list(sesion.series.order_by("numero_serie").values_list("numero_serie", flat=True)),
+			[1, 2],
+		)
+		self.assertEqual(
+			list(sesion.series.order_by("numero_serie").values_list("repeticiones", flat=True)),
+			[9, 7],
+		)
+
+		respuesta = self.client.post(
+			reverse("eliminar_serie_sesion", args=[sesion.pk, serie_ajena.pk])
+		)
+		self.assertRedirects(respuesta, reverse("editar_sesion", args=[sesion.pk]))
+		self.assertTrue(Serie.objects.filter(pk=serie_ajena.pk).exists())
 
 	def test_panel_admin_desasigna_rutina_sin_borrar_historial_y_permite_reasignar(self):
 		admin_user = get_user_model().objects.create_superuser(

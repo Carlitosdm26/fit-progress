@@ -18,13 +18,26 @@
             {% if sesion.notas %}
             <p>{{ sesion.notas|linebreaksbr }}</p>
             {% endif %}
-            <div class="meta">
-                {% for serie in sesion.series.all %}
-                    {{ serie.usuario_entrenamiento_ejercicio.entrenamiento_ejercicio.ejercicio.nombre }} · Serie {{ serie.numero_serie }}: {{ serie.repeticiones }} x {{ serie.peso }} kg{% if not forloop.last %}<br>{% endif %}
-                {% empty %}
-                    Sin ejercicios registrados.
-                {% endfor %}
-            </div>
+            {% regroup sesion.series.all by usuario_entrenamiento_ejercicio as ejercicios %}
+            {% for grupo in ejercicios %}
+            <section class="history-exercise">
+                <div class="history-exercise-heading">
+                    <strong>{{ grupo.grouper.entrenamiento_ejercicio.ejercicio.nombre }}</strong>
+                    <span>{{ grupo.list|length }} {% if grupo.list|length == 1 %}serie{% else %}series{% endif %}</span>
+                </div>
+                <div class="history-sets">
+                    {% for serie in grupo.list %}
+                    <div class="history-set">
+                        <span>Serie {{ serie.numero_serie }}</span>
+                        <span>{{ serie.repeticiones }} repeticiones</span>
+                        <strong>{{ serie.peso }} kg</strong>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+            {% empty %}
+            <p class="meta">Sin ejercicios registrados.</p>
+            {% endfor %}
             <div class="actions" style="margin-bottom: 0;">
                 <a class="button secondary small" href="{% url 'editar_sesion' sesion.id %}">Ver sesión</a>
             </div>

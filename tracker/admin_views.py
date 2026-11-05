@@ -30,6 +30,7 @@ from .models import (
 	UsuarioEntrenamiento,
 	UsuarioEntrenamientoEjercicio,
 )
+from .services import eliminar_serie_y_reenumerar
 
 
 def staff_required(view_func):
@@ -508,3 +509,14 @@ def serie_editar(request, serie_id):
 			"volver": reverse("panel_admin:sesion_detalle", args=[serie.sesion_entrenamiento_id]),
 		},
 	)
+
+
+@staff_required
+@require_http_methods(["POST"])
+def serie_eliminar(request, sesion_id, serie_id):
+	sesion = get_object_or_404(SesionEntrenamiento, pk=sesion_id)
+	serie = get_object_or_404(Serie, pk=serie_id, sesion_entrenamiento=sesion)
+	ejercicio = serie.usuario_entrenamiento_ejercicio.entrenamiento_ejercicio.ejercicio.nombre
+	eliminar_serie_y_reenumerar(serie)
+	messages.success(request, f"Serie eliminada de {ejercicio}.")
+	return redirect("panel_admin:sesion_detalle", sesion_id=sesion.pk)

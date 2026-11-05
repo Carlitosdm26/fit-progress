@@ -65,6 +65,15 @@
         li strong { display: block; font-size: 1rem; }
         .meta { color: var(--muted); font: .8rem "DM Sans", sans-serif; margin-top: 5px; }
         .exercise-line { display: inline-block; margin-right: 8px; }
+        .history-exercise { margin-top: 12px; border: 1px solid var(--line); background: #fbfcfa; }
+        .history-exercise-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; background: #f0f4ed; }
+        .history-exercise-heading strong { font: 700 .88rem "DM Sans", sans-serif; }
+        .history-exercise-heading span { color: var(--muted); font: 700 .68rem "DM Sans", sans-serif; text-transform: uppercase; }
+        .history-sets { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; padding: 10px; }
+        .history-set { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 10px; background: white; border: 1px solid var(--line); font: .75rem "DM Sans", sans-serif; }
+        .history-set > span:first-child { color: var(--muted); white-space: nowrap; }
+        .history-set > span:nth-child(2) { text-align: center; }
+        .history-set strong { white-space: nowrap; font-size: .82rem; }
         form { max-width: 680px; }
         nav form, .nav-links form, .actions form { max-width: none; margin: 0; }
         label { display: block; margin: 17px 0 7px; font: 700 .78rem "DM Sans", sans-serif; text-transform: uppercase; }

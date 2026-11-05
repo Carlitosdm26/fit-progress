@@ -22,5 +22,6 @@ urlpatterns = [
 	path("sesiones/", admin_views.sesiones, name="sesiones"),
 	path("sesiones/nueva/", admin_views.sesion_nueva, name="sesion_nueva"),
 	path("sesiones/<int:sesion_id>/", admin_views.sesion_detalle, name="sesion_detalle"),
+	path("sesiones/<int:sesion_id>/series/<int:serie_id>/eliminar/", admin_views.serie_eliminar, name="serie_eliminar"),
 	path("series/<int:serie_id>/", admin_views.serie_editar, name="serie_editar"),
 ]
