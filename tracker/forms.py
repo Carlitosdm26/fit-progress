@@ -275,7 +275,7 @@ class AdminAsignacionForm(forms.ModelForm):
 		usuario = cleaned_data.get("usuario")
 		entrenamiento = cleaned_data.get("entrenamiento") or self.instance.entrenamiento
 		if usuario and entrenamiento and UsuarioEntrenamiento.objects.filter(
-			usuario=usuario, entrenamiento=entrenamiento
+			usuario=usuario, entrenamiento=entrenamiento, activa=True
 		).exclude(pk=self.instance.pk).exists():
 			self.add_error("usuario", "Este usuario ya tiene asignada esta rutina.")
 		return cleaned_data

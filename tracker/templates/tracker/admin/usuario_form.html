@@ -22,7 +22,7 @@
 <section class="form-section" style="margin-top: 24px">
     <div class="section-head"><h2>Rutinas y sesiones</h2><a class="row-link" href="{% url 'panel_admin:sesiones' %}?usuario={{ usuario.pk }}">Ver todas las sesiones</a></div>
     {% for asignacion in rutinas_usuario %}
-    <div class="relation-line"><div><a class="row-link" href="{% url 'panel_admin:entrenamiento_detalle' asignacion.entrenamiento_id %}">{{ asignacion.entrenamiento.nombre }}</a><div class="help">{{ asignacion.sesiones_count }} sesiones registradas</div></div><a class="row-link" href="{% url 'panel_admin:sesiones' %}?usuario={{ usuario.pk }}&rutina={{ asignacion.entrenamiento_id }}">Ver sesiones</a></div>
+    <div class="relation-line"><div><a class="row-link" href="{% url 'panel_admin:entrenamiento_detalle' asignacion.entrenamiento_id %}">{{ asignacion.entrenamiento.nombre }}</a><div class="help"><span class="status {% if asignacion.activa %}active{% endif %}">{% if asignacion.activa %}Asignada{% else %}Desasignada{% endif %}</span> · {{ asignacion.sesiones_count }} sesiones registradas</div></div><a class="row-link" href="{% url 'panel_admin:sesiones' %}?usuario={{ usuario.pk }}&rutina={{ asignacion.entrenamiento_id }}">Ver sesiones</a></div>
     {% empty %}<p class="help">Este usuario todavía no tiene rutinas asignadas.</p>{% endfor %}
     <div class="section-head" style="margin-top: 24px"><h2>Actividad reciente</h2></div>
     <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Rutina</th><th>Series</th><th></th></tr></thead><tbody>

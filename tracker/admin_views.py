@@ -220,11 +220,17 @@ def entrenamiento_detalle(request, entrenamiento_id):
 		messages.success(request, "La rutina se actualizó.")
 		return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
 	if action == "asignar_usuario" and asignacion_form.is_valid():
-		asignacion = asignacion_form.save(commit=False)
-		asignacion.entrenamiento = entrenamiento
 		try:
 			with transaction.atomic():
-				asignacion.save()
+				asignacion, creada = UsuarioEntrenamiento.objects.get_or_create(
+					usuario=asignacion_form.cleaned_data["usuario"],
+					entrenamiento=entrenamiento,
+					defaults={"activa": True},
+				)
+				reactivada = not creada and not asignacion.activa
+				if reactivada:
+					asignacion.activa = True
+					asignacion.save(update_fields=["activa"])
 				for entrada in EntrenamientoEjercicio.objects.filter(entrenamiento=entrenamiento):
 					UsuarioEntrenamientoEjercicio.objects.get_or_create(
 						usuario_entrenamiento=asignacion,
@@ -233,7 +239,11 @@ def entrenamiento_detalle(request, entrenamiento_id):
 		except IntegrityError:
 			messages.error(request, "Este usuario ya tiene asignada la rutina.")
 		else:
-			messages.success(request, f"Rutina asignada a {asignacion.usuario.username}.")
+			messages.success(
+				request,
+				f"Rutina {'asignada' if creada else 'reactivada' if reactivada else 'ya activa'} "
+				f"para {asignacion.usuario.username}.",
+			)
 			return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
 	if action == "anadir_ejercicio" and ejercicio_form.is_valid():
 		try:
@@ -267,6 +277,27 @@ def entrenamiento_detalle(request, entrenamiento_id):
 			).select_related("ejercicio").prefetch_related("elecciones__series"),
 		},
 	)
+
+
+@staff_required
+@require_http_methods(["POST"])
+def entrenamiento_usuario_desasignar(request, entrenamiento_id, user_id):
+	asignacion = get_object_or_404(
+		UsuarioEntrenamiento.objects.select_related("usuario", "entrenamiento"),
+		entrenamiento_id=entrenamiento_id,
+		usuario_id=user_id,
+	)
+	if asignacion.activa:
+		asignacion.activa = False
+		asignacion.save(update_fields=["activa"])
+		messages.success(
+			request,
+			f"Rutina desasignada de {asignacion.usuario.username}. "
+			"Las sesiones y el historial se han conservado.",
+		)
+	else:
+		messages.info(request, "Esta rutina ya estaba desasignada de este usuario.")
+	return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento_id)
 
 
 @staff_required

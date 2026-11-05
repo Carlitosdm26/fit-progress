@@ -419,6 +419,75 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertContains(respuesta, "Prensa")
 		self.assertContains(respuesta, "8 repeticiones")
 
+	def test_panel_admin_desasigna_rutina_sin_borrar_historial_y_permite_reasignar(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="UnaClaveSegura123!",
+		)
+		usuario = get_user_model().objects.create_user(
+			username="usuario",
+			email="usuario@example.com",
+			password="UnaClaveSegura123!",
+		)
+		entrenamiento = Entrenamiento.objects.create(nombre="Rutina conservada")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=usuario, entrenamiento=entrenamiento
+		)
+		ejercicio = Ejercicio.objects.create(nombre="Remo", grupo_muscular="Espalda")
+		entrada = EntrenamientoEjercicio.objects.create(
+			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion, entrenamiento_ejercicio=entrada
+		)
+		sesion = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion, fecha=timezone.now(), notas="Historial intacto"
+		)
+		serie = Serie.objects.create(
+			sesion_entrenamiento=sesion,
+			usuario_entrenamiento_ejercicio=seleccion,
+			numero_serie=1,
+			repeticiones=10,
+			peso=Decimal("35.00"),
+		)
+		self.client.force_login(admin_user)
+
+		respuesta = self.client.post(
+			reverse(
+				"panel_admin:entrenamiento_usuario_desasignar",
+				args=[entrenamiento.pk, usuario.pk],
+			)
+		)
+		self.assertRedirects(
+			respuesta, reverse("panel_admin:entrenamiento_detalle", args=[entrenamiento.pk])
+		)
+		asignacion.refresh_from_db()
+		self.assertFalse(asignacion.activa)
+		self.assertTrue(SesionEntrenamiento.objects.filter(pk=sesion.pk).exists())
+		self.assertTrue(Serie.objects.filter(pk=serie.pk).exists())
+
+		self.client.force_login(usuario)
+		respuesta = self.client.get(reverse("dashboard"))
+		self.assertNotContains(respuesta, "Rutina conservada")
+
+		self.client.force_login(admin_user)
+		respuesta = self.client.post(
+			reverse("panel_admin:entrenamiento_detalle", args=[entrenamiento.pk]),
+			{"action": "asignar_usuario", "usuario": usuario.pk},
+		)
+		self.assertRedirects(
+			respuesta, reverse("panel_admin:entrenamiento_detalle", args=[entrenamiento.pk])
+		)
+		asignacion.refresh_from_db()
+		self.assertTrue(asignacion.activa)
+		self.assertEqual(
+			UsuarioEntrenamiento.objects.filter(usuario=usuario, entrenamiento=entrenamiento).count(),
+			1,
+		)
+		self.assertTrue(SesionEntrenamiento.objects.filter(pk=sesion.pk).exists())
+		self.assertTrue(Serie.objects.filter(pk=serie.pk).exists())
+
 	def test_panel_admin_edita_usuario_sin_perder_sus_rutinas(self):
 		admin_user = get_user_model().objects.create_superuser(
 			username="admin",

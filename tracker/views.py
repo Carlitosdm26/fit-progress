@@ -122,7 +122,7 @@ def dashboard(request):
 		return render(request, "tracker/sin_perfil.html")
 	asignaciones = UsuarioEntrenamiento.objects.select_related(
 		"entrenamiento"
-	).filter(usuario=perfil)
+	).filter(usuario=perfil, activa=True)
 	sesiones_qs = SesionEntrenamiento.objects.select_related(
 		"usuario_entrenamiento__entrenamiento"
 	).filter(usuario_entrenamiento__usuario=perfil).prefetch_related("series")
@@ -256,7 +256,7 @@ def editar_entrenamiento(request, asignacion_id):
 	if perfil is None:
 		return render(request, "tracker/sin_perfil.html")
 	asignacion = UsuarioEntrenamiento.objects.select_related("entrenamiento").filter(
-		pk=asignacion_id, usuario=perfil
+		pk=asignacion_id, usuario=perfil, activa=True
 	).first()
 	if asignacion is None:
 		return redirect("dashboard")
@@ -324,7 +324,7 @@ def eliminar_entrenamiento(request, asignacion_id):
 	if perfil is None:
 		return redirect("login")
 	asignacion = UsuarioEntrenamiento.objects.select_related("entrenamiento").filter(
-		pk=asignacion_id, usuario=perfil
+		pk=asignacion_id, usuario=perfil, activa=True
 	).first()
 	if asignacion is None:
 		return redirect("dashboard")
@@ -345,7 +345,7 @@ def registrar_sesion(request, asignacion_id):
 	if perfil is None:
 		return render(request, "tracker/sin_perfil.html")
 	asignacion = UsuarioEntrenamiento.objects.filter(
-		pk=asignacion_id, usuario=perfil
+		pk=asignacion_id, usuario=perfil, activa=True
 	).first()
 	if asignacion is None:
 		return redirect("dashboard")

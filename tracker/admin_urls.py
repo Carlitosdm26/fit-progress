@@ -15,6 +15,7 @@ urlpatterns = [
 	path("entrenamientos/", admin_views.entrenamientos, name="entrenamientos"),
 	path("entrenamientos/nuevo/", admin_views.entrenamiento_nuevo, name="entrenamiento_nuevo"),
 	path("entrenamientos/<int:entrenamiento_id>/", admin_views.entrenamiento_detalle, name="entrenamiento_detalle"),
+	path("entrenamientos/<int:entrenamiento_id>/usuarios/<int:user_id>/desasignar/", admin_views.entrenamiento_usuario_desasignar, name="entrenamiento_usuario_desasignar"),
 	path("entrenamientos/<int:entrenamiento_id>/ejercicios/<int:entrada_id>/", admin_views.entrenamiento_ejercicio_editar, name="entrenamiento_ejercicio_editar"),
 	path("entrenamientos/<int:entrenamiento_id>/ejercicios/<int:entrada_id>/quitar/", admin_views.entrenamiento_ejercicio_eliminar, name="entrenamiento_ejercicio_eliminar"),
 	path("sesiones/", admin_views.sesiones, name="sesiones"),

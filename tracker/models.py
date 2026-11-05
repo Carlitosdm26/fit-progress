@@ -131,6 +131,7 @@ class UsuarioEntrenamiento(models.Model):
 		Entrenamiento, on_delete=models.CASCADE, related_name="usuarios"
 	)
 	fecha_asignacion = models.DateTimeField(auto_now_add=True)
+	activa = models.BooleanField(default=True)
 
 	class Meta:
 		constraints = [
