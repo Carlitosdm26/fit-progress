@@ -1,9 +1,9 @@
 from datetime import datetime
 from decimal import Decimal
 
-from django.db import IntegrityError
+from django.db import IntegrityError, connection
 from django.db.models.deletion import ProtectedError
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 from django.contrib.auth import get_user_model
@@ -12,6 +12,7 @@ from .models import (
 	Ejercicio,
 	Entrenamiento,
 	EntrenamientoEjercicio,
+	PerfilUsuario,
 	Serie,
 	SesionEntrenamiento,
 	UsuarioEntrenamiento,
@@ -94,6 +95,71 @@ class SeguimientoModelTests(TestCase):
 
 
 class AutenticacionYRutinasTests(TestCase):
+	def test_admin_puede_abrir_edicion_de_usuario(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="UnaClaveSegura123!",
+		)
+		user = get_user_model().objects.create_user(
+			username="usuario",
+			email="usuario@example.com",
+			password="UnaClaveSegura123!",
+		)
+		self.client.force_login(admin_user)
+
+		respuesta = self.client.get(
+			reverse("admin:tracker_usuario_change", args=[user.pk])
+		)
+
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(respuesta, "usuario@example.com")
+
+		PerfilUsuario.objects.create(usuario=user, descripcion="Perfil de prueba")
+		respuesta = self.client.get(
+			reverse("admin:tracker_usuario_change", args=[user.pk])
+		)
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(respuesta, "Perfil de prueba")
+
+
+class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
+	def test_migration_recreates_missing_profile_table_for_admin(self):
+		from django.apps import apps
+
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="UnaClaveSegura123!",
+		)
+		user = get_user_model().objects.create_user(
+			username="usuario",
+			email="usuario@example.com",
+			password="UnaClaveSegura123!",
+		)
+		profile_model = apps.get_model("tracker", "PerfilUsuario")
+		migration = __import__(
+			"tracker.migrations.0005_ensure_perfilusuario_table",
+			fromlist=["ensure_perfilusuario_table"],
+		)
+		self.client.force_login(admin_user)
+		self.client.raise_request_exception = False
+		change_url = reverse("admin:tracker_usuario_change", args=[user.pk])
+
+		with connection.schema_editor() as schema_editor:
+			schema_editor.delete_model(profile_model)
+
+		response = self.client.get(change_url)
+		self.assertEqual(response.status_code, 500)
+
+		with connection.schema_editor() as schema_editor:
+			migration.ensure_perfilusuario_table(apps, schema_editor)
+			migration.ensure_perfilusuario_table(apps, schema_editor)
+
+		response = self.client.get(change_url)
+
+		self.assertEqual(response.status_code, 200)
+
 	def test_cuenta_activa_sin_grupo_tiene_perfil_deportivo(self):
 		cuenta = get_user_model().objects.create_user(
 			username="sin-perfil",
