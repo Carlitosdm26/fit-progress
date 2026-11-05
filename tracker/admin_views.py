@@ -4,13 +4,32 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.views import redirect_to_login
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db import IntegrityError, transaction
+from django.db.models import Count, Q
+from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 
-from .forms import AdminUsuarioCreationForm, AdminUsuarioUpdateForm
-from .models import Ejercicio, Entrenamiento, SesionEntrenamiento
+from .forms import (
+	AdminAsignacionForm,
+	AdminEjercicioForm,
+	AdminEntrenamientoEjercicioForm,
+	AdminEntrenamientoForm,
+	AdminSerieForm,
+	AdminSesionForm,
+	AdminUsuarioCreationForm,
+	AdminUsuarioUpdateForm,
+)
+from .models import (
+	Ejercicio,
+	Entrenamiento,
+	EntrenamientoEjercicio,
+	Serie,
+	SesionEntrenamiento,
+	UsuarioEntrenamiento,
+	UsuarioEntrenamientoEjercicio,
+)
 
 
 def staff_required(view_func):
@@ -65,7 +84,7 @@ def usuarios(request):
 @staff_required
 @require_http_methods(["GET", "POST"])
 def usuario_nuevo(request):
-	form = AdminUsuarioCreationForm(request.POST or None)
+	form = AdminUsuarioCreationForm(request.POST or None, actor=request.user)
 	if request.method == "POST" and form.is_valid():
 		usuario = form.save()
 		messages.success(request, f"La cuenta {usuario.username} se creó correctamente.")
@@ -78,7 +97,9 @@ def usuario_nuevo(request):
 def usuario_editar(request, user_id):
 	User = get_user_model()
 	usuario = get_object_or_404(User, pk=user_id)
-	form = AdminUsuarioUpdateForm(request.POST or None, instance=usuario)
+	if usuario.is_superuser and not request.user.is_superuser:
+		return HttpResponseForbidden("Solo un superusuario puede editar esta cuenta.")
+	form = AdminUsuarioUpdateForm(request.POST or None, instance=usuario, actor=request.user)
 	if request.method == "POST" and form.is_valid():
 		form.save()
 		messages.success(request, f"La cuenta {usuario.username} se actualizó correctamente.")
@@ -86,5 +107,327 @@ def usuario_editar(request, user_id):
 	return render(
 		request,
 		"tracker/admin/usuario_form.html",
-		{"form": form, "nuevo": False, "usuario": usuario},
+		{
+			"form": form,
+			"nuevo": False,
+			"usuario": usuario,
+			"rutinas_usuario": UsuarioEntrenamiento.objects.filter(usuario=usuario)
+			.select_related("entrenamiento")
+			.annotate(sesiones_count=Count("sesiones", distinct=True)),
+			"sesiones_usuario": SesionEntrenamiento.objects.filter(
+				usuario_entrenamiento__usuario=usuario
+			)
+			.select_related("usuario_entrenamiento__entrenamiento")
+			.annotate(series_count=Count("series"))
+			.order_by("-fecha")[:10],
+		},
+	)
+
+
+@staff_required
+def ejercicios(request):
+	query = request.GET.get("q", "").strip()
+	queryset = Ejercicio.objects.annotate(
+		rutinas_count=Count("entrenamientos", distinct=True)
+	).order_by("nombre")
+	if query:
+		queryset = queryset.filter(
+			Q(nombre__icontains=query)
+			| Q(grupo_muscular__icontains=query)
+			| Q(equipamiento__icontains=query)
+		)
+	return render(
+		request,
+		"tracker/admin/ejercicios.html",
+		{"page_obj": Paginator(queryset, 30).get_page(request.GET.get("page")), "query": query},
+	)
+
+
+@staff_required
+@require_http_methods(["GET", "POST"])
+def ejercicio_nuevo(request):
+	form = AdminEjercicioForm(request.POST or None)
+	if request.method == "POST" and form.is_valid():
+		ejercicio = form.save()
+		messages.success(request, f"El ejercicio {ejercicio.nombre} se creó.")
+		return redirect("panel_admin:ejercicios")
+	return render(request, "tracker/admin/entidad_form.html", {"form": form, "titulo": "Nuevo ejercicio", "volver": reverse("panel_admin:ejercicios")})
+
+
+@staff_required
+@require_http_methods(["GET", "POST"])
+def ejercicio_editar(request, ejercicio_id):
+	ejercicio = get_object_or_404(Ejercicio, pk=ejercicio_id)
+	form = AdminEjercicioForm(request.POST or None, instance=ejercicio)
+	if request.method == "POST" and form.is_valid():
+		form.save()
+		messages.success(request, f"El ejercicio {ejercicio.nombre} se actualizó.")
+		return redirect("panel_admin:ejercicios")
+	return render(
+		request,
+		"tracker/admin/entidad_form.html",
+		{"form": form, "titulo": f"Editar {ejercicio.nombre}", "volver": reverse("panel_admin:ejercicios")},
+	)
+
+
+@staff_required
+def entrenamientos(request):
+	query = request.GET.get("q", "").strip()
+	queryset = Entrenamiento.objects.annotate(
+		usuarios_count=Count("usuarios", distinct=True),
+		ejercicios_count=Count("ejercicios", distinct=True),
+	).order_by("nombre")
+	if query:
+		queryset = queryset.filter(Q(nombre__icontains=query) | Q(descripcion__icontains=query))
+	return render(
+		request,
+		"tracker/admin/entrenamientos.html",
+		{"page_obj": Paginator(queryset, 30).get_page(request.GET.get("page")), "query": query},
+	)
+
+
+@staff_required
+@require_http_methods(["GET", "POST"])
+def entrenamiento_nuevo(request):
+	form = AdminEntrenamientoForm(request.POST or None)
+	if request.method == "POST" and form.is_valid():
+		entrenamiento = form.save()
+		messages.success(request, f"La rutina {entrenamiento.nombre} se creó.")
+		return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
+	return render(
+		request,
+		"tracker/admin/entidad_form.html",
+		{"form": form, "titulo": "Nueva rutina", "volver": reverse("panel_admin:entrenamientos")},
+	)
+
+
+@staff_required
+@require_http_methods(["GET", "POST"])
+def entrenamiento_detalle(request, entrenamiento_id):
+	entrenamiento = get_object_or_404(Entrenamiento, pk=entrenamiento_id)
+	action = request.POST.get("action") if request.method == "POST" else None
+	form = AdminEntrenamientoForm(
+		request.POST if action == "guardar_rutina" else None, instance=entrenamiento
+	)
+	asignacion_form = AdminAsignacionForm(
+		request.POST if action == "asignar_usuario" else None, entrenamiento=entrenamiento
+	)
+	ejercicio_form = AdminEntrenamientoEjercicioForm(
+		request.POST if action == "anadir_ejercicio" else None, entrenamiento=entrenamiento
+	)
+	if action == "guardar_rutina" and form.is_valid():
+		form.save()
+		messages.success(request, "La rutina se actualizó.")
+		return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
+	if action == "asignar_usuario" and asignacion_form.is_valid():
+		asignacion = asignacion_form.save(commit=False)
+		asignacion.entrenamiento = entrenamiento
+		try:
+			with transaction.atomic():
+				asignacion.save()
+				for entrada in EntrenamientoEjercicio.objects.filter(entrenamiento=entrenamiento):
+					UsuarioEntrenamientoEjercicio.objects.get_or_create(
+						usuario_entrenamiento=asignacion,
+						entrenamiento_ejercicio=entrada,
+					)
+		except IntegrityError:
+			messages.error(request, "Este usuario ya tiene asignada la rutina.")
+		else:
+			messages.success(request, f"Rutina asignada a {asignacion.usuario.username}.")
+			return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
+	if action == "anadir_ejercicio" and ejercicio_form.is_valid():
+		try:
+			with transaction.atomic():
+				entrada = ejercicio_form.save(commit=False)
+				entrada.entrenamiento = entrenamiento
+				entrada.save()
+				for asignacion in UsuarioEntrenamiento.objects.filter(entrenamiento=entrenamiento):
+					UsuarioEntrenamientoEjercicio.objects.get_or_create(
+						usuario_entrenamiento=asignacion,
+						entrenamiento_ejercicio=entrada,
+					)
+		except IntegrityError:
+			messages.error(request, "No se pudo añadir: comprueba que el ejercicio y el orden no estén repetidos.")
+		else:
+			messages.success(request, "Ejercicio añadido a la rutina y sincronizado con sus usuarios.")
+			return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
+	return render(
+		request,
+		"tracker/admin/entrenamiento_detalle.html",
+		{
+			"entrenamiento": entrenamiento,
+			"form": form,
+			"asignacion_form": asignacion_form,
+			"ejercicio_form": ejercicio_form,
+			"asignaciones": UsuarioEntrenamiento.objects.filter(entrenamiento=entrenamiento)
+			.select_related("usuario")
+			.annotate(sesiones_count=Count("sesiones", distinct=True)),
+			"ejercicios_rutina": EntrenamientoEjercicio.objects.filter(
+				entrenamiento=entrenamiento
+			).select_related("ejercicio").prefetch_related("elecciones__series"),
+		},
+	)
+
+
+@staff_required
+@require_http_methods(["GET", "POST"])
+def entrenamiento_ejercicio_editar(request, entrenamiento_id, entrada_id):
+	entrenamiento = get_object_or_404(Entrenamiento, pk=entrenamiento_id)
+	entrada = get_object_or_404(
+		EntrenamientoEjercicio.objects.select_related("ejercicio"),
+		pk=entrada_id,
+		entrenamiento=entrenamiento,
+	)
+	form = AdminEntrenamientoEjercicioForm(
+		request.POST or None, instance=entrada, entrenamiento=entrenamiento
+	)
+	if request.method == "POST" and form.is_valid():
+		try:
+			form.save()
+		except IntegrityError:
+			form.add_error(None, "El ejercicio o el orden ya están asignados a esta rutina.")
+		else:
+			messages.success(request, "El ejercicio de la rutina se actualizó.")
+			return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
+	return render(
+		request,
+		"tracker/admin/entidad_form.html",
+		{
+			"form": form,
+			"titulo": f"Editar ejercicio de {entrenamiento.nombre}",
+			"volver": reverse("panel_admin:entrenamiento_detalle", args=[entrenamiento.pk]),
+		},
+	)
+
+
+@staff_required
+@require_http_methods(["POST"])
+def entrenamiento_ejercicio_eliminar(request, entrenamiento_id, entrada_id):
+	entrenamiento = get_object_or_404(Entrenamiento, pk=entrenamiento_id)
+	entrada = get_object_or_404(
+		EntrenamientoEjercicio, pk=entrada_id, entrenamiento=entrenamiento
+	)
+	selecciones = UsuarioEntrenamientoEjercicio.objects.filter(entrenamiento_ejercicio=entrada)
+	if Serie.objects.filter(usuario_entrenamiento_ejercicio__in=selecciones).exists():
+		messages.error(request, "No se puede quitar: este ejercicio ya tiene series registradas.")
+	else:
+		with transaction.atomic():
+			selecciones.delete()
+			entrada.delete()
+		messages.success(request, "Ejercicio retirado de la rutina.")
+	return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
+
+
+@staff_required
+def sesiones(request):
+	queryset = SesionEntrenamiento.objects.select_related(
+		"usuario_entrenamiento__usuario", "usuario_entrenamiento__entrenamiento"
+	).annotate(series_count=Count("series")).order_by("-fecha")
+	usuario_id = request.GET.get("usuario", "")
+	rutina_id = request.GET.get("rutina", "")
+	if usuario_id.isdigit():
+		queryset = queryset.filter(usuario_entrenamiento__usuario_id=int(usuario_id))
+	if rutina_id.isdigit():
+		queryset = queryset.filter(usuario_entrenamiento__entrenamiento_id=int(rutina_id))
+	return render(
+		request,
+		"tracker/admin/sesiones.html",
+		{
+			"page_obj": Paginator(queryset, 30).get_page(request.GET.get("page")),
+			"usuarios": get_user_model().objects.order_by("username"),
+			"entrenamientos": Entrenamiento.objects.order_by("nombre"),
+			"usuario_id": usuario_id,
+			"rutina_id": rutina_id,
+		},
+	)
+
+
+@staff_required
+@require_http_methods(["GET", "POST"])
+def sesion_nueva(request):
+	form = AdminSesionForm(request.POST or None)
+	if request.method == "POST" and form.is_valid():
+		sesion = form.save()
+		messages.success(request, "La sesión se creó.")
+		return redirect("panel_admin:sesion_detalle", sesion_id=sesion.pk)
+	return render(
+		request,
+		"tracker/admin/entidad_form.html",
+		{"form": form, "titulo": "Nueva sesión", "volver": reverse("panel_admin:sesiones")},
+	)
+
+
+@staff_required
+@require_http_methods(["GET", "POST"])
+def sesion_detalle(request, sesion_id):
+	sesion = get_object_or_404(
+		SesionEntrenamiento.objects.select_related(
+			"usuario_entrenamiento__usuario", "usuario_entrenamiento__entrenamiento"
+		),
+		pk=sesion_id,
+	)
+	action = request.POST.get("action") if request.method == "POST" else None
+	sesion_form = AdminSesionForm(
+		request.POST if action == "guardar_sesion" else None,
+		instance=sesion,
+	)
+	serie_form = AdminSerieForm(
+		request.POST if action == "anadir_serie" else None,
+		sesion=sesion,
+	)
+	if action == "guardar_sesion" and sesion_form.is_valid():
+		sesion_form.save()
+		messages.success(request, "La sesión se actualizó.")
+		return redirect("panel_admin:sesion_detalle", sesion_id=sesion.pk)
+	if action == "anadir_serie" and serie_form.is_valid():
+		serie = serie_form.save(commit=False)
+		serie.sesion_entrenamiento = sesion
+		try:
+			serie.save()
+		except IntegrityError:
+			serie_form.add_error(
+				None, "Ya existe ese número de serie para este ejercicio en la sesión."
+			)
+		else:
+			messages.success(request, "Serie añadida a la sesión.")
+			return redirect("panel_admin:sesion_detalle", sesion_id=sesion.pk)
+	return render(
+		request,
+		"tracker/admin/sesion_detalle.html",
+		{
+			"sesion": sesion,
+			"sesion_form": sesion_form,
+			"serie_form": serie_form,
+			"series": sesion.series.select_related(
+				"usuario_entrenamiento_ejercicio__entrenamiento_ejercicio__ejercicio"
+			),
+		},
+	)
+
+
+@staff_required
+@require_http_methods(["GET", "POST"])
+def serie_editar(request, serie_id):
+	serie = get_object_or_404(
+		Serie.objects.select_related("sesion_entrenamiento"), pk=serie_id
+	)
+	form = AdminSerieForm(request.POST or None, instance=serie, sesion=serie.sesion_entrenamiento)
+	if request.method == "POST" and form.is_valid():
+		try:
+			form.save()
+		except IntegrityError:
+			form.add_error(
+				None, "Ya existe ese número de serie para este ejercicio en la sesión."
+			)
+		else:
+			messages.success(request, "La serie se actualizó.")
+			return redirect("panel_admin:sesion_detalle", sesion_id=serie.sesion_entrenamiento_id)
+	return render(
+		request,
+		"tracker/admin/entidad_form.html",
+		{
+			"form": form,
+			"titulo": "Editar serie",
+			"volver": reverse("panel_admin:sesion_detalle", args=[serie.sesion_entrenamiento_id]),
+		},
 	)

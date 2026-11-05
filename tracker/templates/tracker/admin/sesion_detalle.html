@@ -1,0 +1,12 @@
+{% extends "tracker/admin/base.html" %}
+{% block title %}Sesión {{ sesion.pk }} | Administración{% endblock %}
+{% block content %}
+<div class="heading"><div><div class="eyebrow"><a class="row-link" href="{% url 'panel_admin:sesiones' %}">Sesiones</a> / Detalle</div><h1>{{ sesion.fecha|date:"d/m/Y H:i" }}</h1><p><a class="row-link" href="{% url 'panel_admin:usuario_editar' sesion.usuario_entrenamiento.usuario_id %}">{{ sesion.usuario_entrenamiento.usuario.username }}</a> · <a class="row-link" href="{% url 'panel_admin:entrenamiento_detalle' sesion.usuario_entrenamiento.entrenamiento_id %}">{{ sesion.usuario_entrenamiento.entrenamiento.nombre }}</a></p></div></div>
+<div class="detail-grid">
+    <section class="form-section"><h2>Datos de sesión</h2><form class="inline-form" method="post">{% csrf_token %}<input type="hidden" name="action" value="guardar_sesion">{{ sesion_form.non_field_errors }}{% for field in sesion_form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<p class="help">{{ field.help_text }}</p>{% endif %}{% if field.errors %}<div class="errors">{{ field.errors }}</div>{% endif %}</div>{% endfor %}<button class="button" type="submit">Guardar sesión</button></form></section>
+    <section class="form-section"><div class="section-head"><h2>Series registradas</h2><span class="metric-label">{{ series|length }} series</span></div>
+        {% for serie in series %}<div class="relation-line"><div><strong>{{ serie.usuario_entrenamiento_ejercicio.entrenamiento_ejercicio.ejercicio.nombre }}</strong><div class="help">Serie {{ serie.numero_serie }} · {{ serie.repeticiones }} repeticiones · {{ serie.peso }} kg</div></div><a class="row-link" href="{% url 'panel_admin:serie_editar' serie.pk %}">Editar</a></div>{% empty %}<p class="help">No hay series registradas en esta sesión.</p>{% endfor %}
+        <form class="inline-form" method="post">{% csrf_token %}<input type="hidden" name="action" value="anadir_serie"><h3>Añadir serie</h3>{{ serie_form.non_field_errors }}{% for field in serie_form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="errors">{{ field.errors }}</div>{% endif %}</div>{% endfor %}<button class="button" type="submit">Añadir serie</button></form>
+    </section>
+</div>
+{% endblock %}

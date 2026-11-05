@@ -18,4 +18,17 @@
     </div>
     <div class="form-actions"><button class="button" type="submit">{% if nuevo %}Crear cuenta{% else %}Guardar cambios{% endif %}</button><a class="button secondary" href="{% url 'panel_admin:usuarios' %}">Cancelar</a></div>
 </form>
+{% if usuario %}
+<section class="form-section" style="margin-top: 24px">
+    <div class="section-head"><h2>Rutinas y sesiones</h2><a class="row-link" href="{% url 'panel_admin:sesiones' %}?usuario={{ usuario.pk }}">Ver todas las sesiones</a></div>
+    {% for asignacion in rutinas_usuario %}
+    <div class="relation-line"><div><a class="row-link" href="{% url 'panel_admin:entrenamiento_detalle' asignacion.entrenamiento_id %}">{{ asignacion.entrenamiento.nombre }}</a><div class="help">{{ asignacion.sesiones_count }} sesiones registradas</div></div><a class="row-link" href="{% url 'panel_admin:sesiones' %}?usuario={{ usuario.pk }}&rutina={{ asignacion.entrenamiento_id }}">Ver sesiones</a></div>
+    {% empty %}<p class="help">Este usuario todavía no tiene rutinas asignadas.</p>{% endfor %}
+    <div class="section-head" style="margin-top: 24px"><h2>Actividad reciente</h2></div>
+    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Rutina</th><th>Series</th><th></th></tr></thead><tbody>
+    {% for sesion in sesiones_usuario %}<tr><td>{{ sesion.fecha|date:"d/m/Y H:i" }}</td><td><a class="row-link" href="{% url 'panel_admin:entrenamiento_detalle' sesion.usuario_entrenamiento.entrenamiento_id %}">{{ sesion.usuario_entrenamiento.entrenamiento.nombre }}</a></td><td>{{ sesion.series_count }}</td><td><a class="row-link" href="{% url 'panel_admin:sesion_detalle' sesion.pk %}">Abrir</a></td></tr>
+    {% empty %}<tr><td class="empty" colspan="4">Este usuario todavía no tiene sesiones.</td></tr>{% endfor %}
+    </tbody></table></div>
+</section>
+{% endif %}
 {% endblock %}
