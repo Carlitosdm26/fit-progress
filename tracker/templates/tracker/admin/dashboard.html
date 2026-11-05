@@ -12,7 +12,7 @@
 <section aria-labelledby="recent-users-title">
     <div class="section-head"><h2 id="recent-users-title">Cuentas recientes</h2><a class="row-link" href="{% url 'panel_admin:usuarios' %}">Ver todas</a></div>
     <div class="table-wrap"><table><thead><tr><th>Usuario</th><th>Email</th><th>Estado</th><th>Alta</th><th></th></tr></thead><tbody>
-        {% for cuenta in ultimos_usuarios %}<tr><td>{{ cuenta.username }}</td><td>{{ cuenta.email|default:"—" }}</td><td><span class="status {% if cuenta.is_active %}active{% endif %}">{% if cuenta.is_active %}Activa{% else %}Inactiva{% endif %}</span></td><td>{{ cuenta.date_joined|date:"d/m/Y" }}</td><td><a class="row-link" href="{% url 'panel_admin:usuario_editar' cuenta.pk %}">Editar</a></td></tr>
+        {% for cuenta in ultimos_usuarios %}<tr><td>{{ cuenta.username }}</td><td>{{ cuenta.email|default:"—" }}</td><td><span class="status {% if cuenta.is_active %}active{% endif %}">{% if cuenta.is_active %}Activa{% else %}Inactiva{% endif %}</span></td><td>{{ cuenta.date_joined|date:"d/m/Y" }}</td><td><a class="row-link" href="{% url 'panel_admin:usuario_detalle' cuenta.pk %}">Ver</a></td></tr>
         {% empty %}<tr><td class="empty" colspan="5">No hay cuentas registradas.</td></tr>{% endfor %}
     </tbody></table></div>
 </section>

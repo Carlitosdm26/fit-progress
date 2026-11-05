@@ -88,8 +88,33 @@ def usuario_nuevo(request):
 	if request.method == "POST" and form.is_valid():
 		usuario = form.save()
 		messages.success(request, f"La cuenta {usuario.username} se creó correctamente.")
-		return redirect("panel_admin:usuario_editar", user_id=usuario.pk)
+		return redirect("panel_admin:usuario_detalle", user_id=usuario.pk)
 	return render(request, "tracker/admin/usuario_form.html", {"form": form, "nuevo": True})
+
+
+def _usuario_actividad_context(usuario):
+	return {
+		"usuario": usuario,
+		"rutinas_usuario": UsuarioEntrenamiento.objects.filter(usuario=usuario)
+		.select_related("entrenamiento")
+		.annotate(sesiones_count=Count("sesiones", distinct=True)),
+		"sesiones_usuario": SesionEntrenamiento.objects.filter(
+			usuario_entrenamiento__usuario=usuario
+		)
+		.select_related("usuario_entrenamiento__entrenamiento")
+		.annotate(series_count=Count("series"))
+		.order_by("-fecha")[:10],
+	}
+
+
+@staff_required
+def usuario_detalle(request, user_id):
+	usuario = get_object_or_404(get_user_model(), pk=user_id)
+	return render(
+		request,
+		"tracker/admin/usuario_detalle.html",
+		_usuario_actividad_context(usuario),
+	)
 
 
 @staff_required
@@ -110,16 +135,7 @@ def usuario_editar(request, user_id):
 		{
 			"form": form,
 			"nuevo": False,
-			"usuario": usuario,
-			"rutinas_usuario": UsuarioEntrenamiento.objects.filter(usuario=usuario)
-			.select_related("entrenamiento")
-			.annotate(sesiones_count=Count("sesiones", distinct=True)),
-			"sesiones_usuario": SesionEntrenamiento.objects.filter(
-				usuario_entrenamiento__usuario=usuario
-			)
-			.select_related("usuario_entrenamiento__entrenamiento")
-			.annotate(series_count=Count("series"))
-			.order_by("-fecha")[:10],
+			**_usuario_actividad_context(usuario),
 		},
 	)
 
@@ -429,11 +445,41 @@ def sesion_detalle(request, sesion_id):
 			"sesion": sesion,
 			"sesion_form": sesion_form,
 			"serie_form": serie_form,
-			"series": sesion.series.select_related(
-				"usuario_entrenamiento_ejercicio__entrenamiento_ejercicio__ejercicio"
-			),
+			**_sesion_series_context(sesion),
 		},
 	)
+
+
+def _sesion_series_context(sesion):
+	series = list(
+		sesion.series.select_related(
+			"usuario_entrenamiento_ejercicio__entrenamiento_ejercicio__ejercicio"
+		).order_by(
+			"usuario_entrenamiento_ejercicio__entrenamiento_ejercicio__orden",
+			"usuario_entrenamiento_ejercicio__entrenamiento_ejercicio__ejercicio__nombre",
+			"numero_serie",
+		)
+	)
+	series_por_ejercicio = []
+	for serie in series:
+		seleccion = serie.usuario_entrenamiento_ejercicio
+		if (
+			not series_por_ejercicio
+			or series_por_ejercicio[-1]["seleccion_id"] != seleccion.pk
+		):
+			series_por_ejercicio.append(
+				{
+					"seleccion_id": seleccion.pk,
+					"ejercicio": seleccion.entrenamiento_ejercicio.ejercicio,
+					"series": [],
+				}
+			)
+		series_por_ejercicio[-1]["series"].append(serie)
+	return {
+		"series": series,
+		"series_por_ejercicio": series_por_ejercicio,
+		"series_count": len(series),
+	}
 
 
 @staff_required

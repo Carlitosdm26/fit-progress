@@ -116,9 +116,22 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertEqual(respuesta.status_code, 200)
 		self.assertContains(respuesta, "usuario@example.com")
 
+		respuesta = self.client.get(
+			reverse("panel_admin:usuario_detalle", args=[user.pk])
+		)
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(respuesta, "Editar usuario")
+		self.assertNotContains(respuesta, "Guardar cambios")
+		respuesta = self.client.get(reverse("panel_admin:usuarios"))
+		self.assertContains(respuesta, "Ver")
+		self.assertContains(
+			respuesta,
+			reverse("panel_admin:usuario_detalle", args=[user.pk]),
+		)
+
 		PerfilUsuario.objects.create(usuario=user, descripcion="Perfil de prueba")
 		respuesta = self.client.get(
-			reverse("panel_admin:usuario_editar", args=[user.pk])
+			reverse("panel_admin:usuario_detalle", args=[user.pk])
 		)
 		self.assertEqual(respuesta.status_code, 200)
 		self.assertContains(respuesta, "usuario@example.com")
@@ -146,6 +159,8 @@ class AutenticacionYRutinasTests(TestCase):
 		respuesta = self.client.get(url)
 		self.assertEqual(respuesta.status_code, 200)
 		self.assertContains(respuesta, "Cuentas registradas")
+		self.assertContains(respuesta, "Abrir menú de administración")
+		self.assertContains(respuesta, "Volver a la app")
 
 	def test_staff_no_puede_conceder_privilegios_ni_editar_superusuarios(self):
 		staff_user = get_user_model().objects.create_user(
@@ -237,7 +252,7 @@ class AutenticacionYRutinasTests(TestCase):
 		)
 		cuenta = get_user_model().objects.get(username="nueva-cuenta")
 		self.assertRedirects(
-			respuesta, reverse("panel_admin:usuario_editar", args=[cuenta.pk])
+			respuesta, reverse("panel_admin:usuario_detalle", args=[cuenta.pk])
 		)
 		self.assertTrue(cuenta.check_password("jR9!wV4#qT8@zK2"))
 
@@ -266,6 +281,10 @@ class AutenticacionYRutinasTests(TestCase):
 		self.client.force_login(admin_user)
 
 		respuesta = self.client.get(reverse("panel_admin:usuario_editar", args=[usuario.pk]))
+		self.assertContains(respuesta, "Fuerza A")
+		respuesta = self.client.get(
+			reverse("panel_admin:usuario_detalle", args=[usuario.pk])
+		)
 		self.assertContains(respuesta, "Fuerza A")
 		respuesta = self.client.get(
 			reverse("panel_admin:entrenamiento_detalle", args=[entrenamiento.pk])
@@ -403,6 +422,13 @@ class AutenticacionYRutinasTests(TestCase):
 		serie = Serie.objects.get(sesion_entrenamiento=sesion)
 		self.assertEqual(serie.usuario_entrenamiento_ejercicio, seleccion)
 		self.assertEqual(serie.peso, Decimal("70.50"))
+		segunda_serie = Serie.objects.create(
+			sesion_entrenamiento=sesion,
+			usuario_entrenamiento_ejercicio=seleccion,
+			numero_serie=2,
+			repeticiones=6,
+			peso=Decimal("75.00"),
+		)
 
 		respuesta = self.client.post(
 			reverse(
@@ -417,7 +443,11 @@ class AutenticacionYRutinasTests(TestCase):
 			reverse("panel_admin:sesion_detalle", args=[sesion.pk])
 		)
 		self.assertContains(respuesta, "Prensa")
-		self.assertContains(respuesta, "8 repeticiones")
+		self.assertContains(respuesta, "70,50 kg")
+		self.assertContains(respuesta, "75,00 kg")
+		self.assertEqual(respuesta.context["series_count"], 2)
+		self.assertEqual(len(respuesta.context["series_por_ejercicio"][0]["series"]), 2)
+		self.assertTrue(Serie.objects.filter(pk=segunda_serie.pk).exists())
 
 	def test_panel_admin_desasigna_rutina_sin_borrar_historial_y_permite_reasignar(self):
 		admin_user = get_user_model().objects.create_superuser(
