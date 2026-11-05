@@ -89,6 +89,12 @@ Las cuentas inactivas pueden iniciar sesión, pero solo verán un aviso para con
 
 Antes de desplegar la migración que unifica las tablas, haz una copia de seguridad de la base de datos. Los perfiles sin cuenta vinculada se convierten en cuentas con contraseña no utilizable; el superusuario deberá establecerles una contraseña desde el panel de administración.
 
+## Administración de rutinas y actividad
+
+En `/admin/`, el panel de operaciones permite buscar y editar usuarios, el catálogo de ejercicios, las rutinas y las sesiones. Desde la ficha de un usuario se consultan sus rutinas y sus diez sesiones más recientes; desde una rutina se ven los usuarios asignados y se pueden abrir sus sesiones. El listado de sesiones se puede filtrar por usuario y por rutina para localizar cualquier registro.
+
+Las rutinas permiten asignarse a usuarios activos y ordenar sus ejercicios. Al añadir un ejercicio a una rutina, también se incorpora a las selecciones de sus usuarios asignados. En una sesión se pueden corregir la fecha y las notas, y añadir o editar series. Los ejercicios del catálogo se pueden pausar sin borrar el historial asociado.
+
 ## Flujo de usuario
 
 1. El usuario inicia sesión en `/login/`.

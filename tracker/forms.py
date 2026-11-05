@@ -6,9 +6,18 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
-from .models import Ejercicio, UsuarioEntrenamientoEjercicio
+from .models import (
+	Ejercicio,
+	Entrenamiento,
+	EntrenamientoEjercicio,
+	Serie,
+	SesionEntrenamiento,
+	UsuarioEntrenamiento,
+	UsuarioEntrenamientoEjercicio,
+)
 
 logger = logging.getLogger("tracker")
 
@@ -120,10 +129,13 @@ class AdminUsuarioCreationForm(UserCreationForm):
 			"is_superuser": "Permisos totales",
 		}
 
-	def __init__(self, *args, **kwargs):
+	def __init__(self, *args, actor=None, **kwargs):
 		super().__init__(*args, **kwargs)
 		self.fields["password1"].label = "Contraseña"
 		self.fields["password2"].label = "Repetir contraseña"
+		if actor is not None and not actor.is_superuser:
+			self.fields.pop("is_staff", None)
+			self.fields.pop("is_superuser", None)
 
 	def clean_email(self):
 		email = self.cleaned_data["email"].strip()
@@ -159,6 +171,12 @@ class AdminUsuarioUpdateForm(forms.ModelForm):
 			"is_staff": "Acceso al panel",
 			"is_superuser": "Permisos totales",
 		}
+
+	def __init__(self, *args, actor=None, **kwargs):
+		super().__init__(*args, **kwargs)
+		if actor is not None and not actor.is_superuser:
+			self.fields.pop("is_staff", None)
+			self.fields.pop("is_superuser", None)
 
 	def clean_email(self):
 		email = self.cleaned_data["email"].strip()
@@ -208,6 +226,151 @@ class AdminUsuarioUpdateForm(forms.ModelForm):
 			usuario.save()
 			self.save_m2m()
 		return usuario
+
+
+class AdminEjercicioForm(forms.ModelForm):
+	class Meta:
+		model = Ejercicio
+		fields = ("nombre", "grupo_muscular", "equipamiento", "descripcion", "activo")
+		labels = {
+			"nombre": "Nombre",
+			"grupo_muscular": "Grupo muscular",
+			"equipamiento": "Equipamiento",
+			"descripcion": "Descripción",
+			"activo": "Disponible para nuevas rutinas",
+		}
+		widgets = {"descripcion": forms.Textarea(attrs={"rows": 3})}
+
+	def clean_nombre(self):
+		nombre = self.cleaned_data["nombre"].strip()
+		duplicates = Ejercicio.objects.filter(nombre__iexact=nombre).exclude(pk=self.instance.pk)
+		if duplicates.exists():
+			raise forms.ValidationError("Ya existe un ejercicio con ese nombre.")
+		return nombre
+
+
+class AdminEntrenamientoForm(forms.ModelForm):
+	class Meta:
+		model = Entrenamiento
+		fields = ("nombre", "descripcion")
+		labels = {"nombre": "Nombre de la rutina", "descripcion": "Descripción"}
+		widgets = {"descripcion": forms.Textarea(attrs={"rows": 3})}
+
+
+class AdminAsignacionForm(forms.ModelForm):
+	class Meta:
+		model = UsuarioEntrenamiento
+		fields = ("usuario", "entrenamiento")
+		labels = {"usuario": "Usuario", "entrenamiento": "Rutina"}
+
+	def __init__(self, *args, entrenamiento=None, **kwargs):
+		super().__init__(*args, **kwargs)
+		if entrenamiento is not None:
+			self.instance.entrenamiento = entrenamiento
+			self.fields.pop("entrenamiento")
+			self.fields["usuario"].queryset = self.fields["usuario"].queryset.filter(is_active=True)
+
+	def clean(self):
+		cleaned_data = super().clean()
+		usuario = cleaned_data.get("usuario")
+		entrenamiento = cleaned_data.get("entrenamiento") or self.instance.entrenamiento
+		if usuario and entrenamiento and UsuarioEntrenamiento.objects.filter(
+			usuario=usuario, entrenamiento=entrenamiento
+		).exclude(pk=self.instance.pk).exists():
+			self.add_error("usuario", "Este usuario ya tiene asignada esta rutina.")
+		return cleaned_data
+
+
+class AdminEntrenamientoEjercicioForm(forms.ModelForm):
+	class Meta:
+		model = EntrenamientoEjercicio
+		fields = ("ejercicio", "orden")
+		labels = {"ejercicio": "Ejercicio", "orden": "Orden en la rutina"}
+
+	def __init__(self, *args, entrenamiento, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.entrenamiento = entrenamiento
+		queryset = Ejercicio.objects.filter(activo=True)
+		if self.instance.pk:
+			queryset = Ejercicio.objects.filter(Q(activo=True) | Q(pk=self.instance.ejercicio_id))
+		self.fields["ejercicio"].queryset = queryset.order_by("nombre")
+
+	def clean(self):
+		cleaned_data = super().clean()
+		ejercicio = cleaned_data.get("ejercicio")
+		orden = cleaned_data.get("orden")
+		if ejercicio and EntrenamientoEjercicio.objects.filter(
+			entrenamiento=self.entrenamiento, ejercicio=ejercicio
+		).exclude(pk=self.instance.pk).exists():
+			self.add_error("ejercicio", "Este ejercicio ya está en la rutina.")
+		if orden and EntrenamientoEjercicio.objects.filter(
+			entrenamiento=self.entrenamiento, orden=orden
+		).exclude(pk=self.instance.pk).exists():
+			self.add_error("orden", "Ese orden ya está ocupado en la rutina.")
+		return cleaned_data
+
+
+class AdminSesionForm(forms.ModelForm):
+	class Meta:
+		model = SesionEntrenamiento
+		fields = ("usuario_entrenamiento", "fecha", "notas")
+		labels = {
+			"usuario_entrenamiento": "Usuario y rutina",
+			"fecha": "Fecha y hora",
+			"notas": "Notas",
+		}
+		widgets = {
+			"fecha": forms.DateTimeInput(
+				attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"
+			),
+			"notas": forms.Textarea(attrs={"rows": 3}),
+		}
+
+	def __init__(self, *args, usuario=None, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.fields["fecha"].input_formats = ["%Y-%m-%dT%H:%M"]
+		if self.instance.pk:
+			self.fields["usuario_entrenamiento"].disabled = True
+			self.fields["usuario_entrenamiento"].help_text = "La cuenta y rutina de una sesión existente no se pueden cambiar."
+		queryset = UsuarioEntrenamiento.objects.select_related("usuario", "entrenamiento")
+		if usuario is not None:
+			queryset = queryset.filter(usuario=usuario)
+		self.fields["usuario_entrenamiento"].queryset = queryset.order_by(
+			"usuario__username", "entrenamiento__nombre"
+		)
+
+
+class AdminSerieForm(forms.ModelForm):
+	class Meta:
+		model = Serie
+		fields = ("usuario_entrenamiento_ejercicio", "numero_serie", "repeticiones", "peso")
+		labels = {
+			"usuario_entrenamiento_ejercicio": "Ejercicio de la rutina",
+			"numero_serie": "Número de serie",
+			"repeticiones": "Repeticiones",
+			"peso": "Peso (kg)",
+		}
+
+	def __init__(self, *args, sesion, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.sesion = sesion
+		self.fields["usuario_entrenamiento_ejercicio"].queryset = (
+			UsuarioEntrenamientoEjercicio.objects.filter(
+				usuario_entrenamiento=sesion.usuario_entrenamiento
+			).select_related("entrenamiento_ejercicio__ejercicio")
+		)
+
+	def clean(self):
+		cleaned_data = super().clean()
+		seleccion = cleaned_data.get("usuario_entrenamiento_ejercicio")
+		numero = cleaned_data.get("numero_serie")
+		if seleccion and numero and Serie.objects.filter(
+			sesion_entrenamiento=self.sesion,
+			usuario_entrenamiento_ejercicio=seleccion,
+			numero_serie=numero,
+		).exclude(pk=self.instance.pk).exists():
+			self.add_error("numero_serie", "Ya existe ese número de serie para este ejercicio.")
+		return cleaned_data
 
 
 class EntrenamientoForm(forms.Form):
