@@ -4,7 +4,6 @@ from decimal import Decimal
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
-from django.contrib.auth.models import Group
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
@@ -109,23 +108,16 @@ class AdminUsuarioCreationForm(UserCreationForm):
 	is_active = forms.BooleanField(label="Cuenta activa", initial=True, required=False)
 	is_staff = forms.BooleanField(label="Acceso al panel", required=False)
 	is_superuser = forms.BooleanField(label="Permisos totales", required=False)
-	groups = forms.ModelMultipleChoiceField(
-		label="Grupos",
-		queryset=Group.objects.all(),
-		required=False,
-		widget=forms.CheckboxSelectMultiple,
-	)
 
 	class Meta(UserCreationForm.Meta):
 		model = get_user_model()
-		fields = ("username", "email", "is_active", "is_staff", "is_superuser", "groups")
+		fields = ("username", "email", "is_active", "is_staff", "is_superuser")
 		labels = {
 			"username": "Nombre de usuario",
 			"email": "Email",
 			"is_active": "Cuenta activa",
 			"is_staff": "Acceso al panel",
 			"is_superuser": "Permisos totales",
-			"groups": "Grupos",
 		}
 
 	def __init__(self, *args, **kwargs):
@@ -157,16 +149,9 @@ class AdminUsuarioUpdateForm(forms.ModelForm):
 		required=False,
 		widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
 	)
-	groups = forms.ModelMultipleChoiceField(
-		label="Grupos",
-		queryset=Group.objects.all(),
-		required=False,
-		widget=forms.CheckboxSelectMultiple,
-	)
-
 	class Meta:
 		model = get_user_model()
-		fields = ("username", "email", "is_active", "is_staff", "is_superuser", "groups")
+		fields = ("username", "email", "is_active", "is_staff", "is_superuser")
 		labels = {
 			"username": "Nombre de usuario",
 			"email": "Email",
