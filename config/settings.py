@@ -35,7 +35,7 @@ DEBUG = False
 ALLOWED_HOSTS = ["*"]
 
 CSRF_TRUSTED_ORIGINS = [
-    "https://carlitosdm26.blitz.cloud",
+    "https://carlitosdm26.prod.page",
 ]
 
 # Application definition
