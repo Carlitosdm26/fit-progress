@@ -1,0 +1,19 @@
+{% extends "tracker/admin/base.html" %}
+{% block title %}Resumen | Administración{% endblock %}
+{% block content %}
+<div class="heading"><div><div class="eyebrow">Control del sistema</div><h1>Resumen</h1><p>Estado actual de las cuentas y la actividad de Fit Progress.</p></div><a class="button" href="{% url 'panel_admin:usuario_nuevo' %}">Crear usuario</a></div>
+<section class="metrics" aria-label="Resumen de actividad">
+    <div class="metric"><span class="metric-label">Cuentas registradas</span><strong class="metric-value">{{ total_usuarios }}</strong></div>
+    <div class="metric"><span class="metric-label">Cuentas activas</span><strong class="metric-value">{{ usuarios_activos }}</strong></div>
+    <div class="metric"><span class="metric-label">Ejercicios</span><strong class="metric-value">{{ ejercicios }}</strong></div>
+    <div class="metric"><span class="metric-label">Entrenamientos</span><strong class="metric-value">{{ entrenamientos }}</strong></div>
+    <div class="metric"><span class="metric-label">Sesiones registradas</span><strong class="metric-value">{{ sesiones }}</strong></div>
+</section>
+<section aria-labelledby="recent-users-title">
+    <div class="section-head"><h2 id="recent-users-title">Cuentas recientes</h2><a class="row-link" href="{% url 'panel_admin:usuarios' %}">Ver todas</a></div>
+    <div class="table-wrap"><table><thead><tr><th>Usuario</th><th>Email</th><th>Estado</th><th>Alta</th><th></th></tr></thead><tbody>
+        {% for cuenta in ultimos_usuarios %}<tr><td>{{ cuenta.username }}</td><td>{{ cuenta.email|default:"—" }}</td><td><span class="status {% if cuenta.is_active %}active{% endif %}">{% if cuenta.is_active %}Activa{% else %}Inactiva{% endif %}</span></td><td>{{ cuenta.date_joined|date:"d/m/Y" }}</td><td><a class="row-link" href="{% url 'panel_admin:usuario_editar' cuenta.pk %}">Editar</a></td></tr>
+        {% empty %}<tr><td class="empty" colspan="5">No hay cuentas registradas.</td></tr>{% endfor %}
+    </tbody></table></div>
+</section>
+{% endblock %}

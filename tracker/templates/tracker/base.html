@@ -137,6 +137,7 @@
             <a href="{% url 'ejercicios' %}"{% if request.resolver_match.url_name == 'ejercicios' %} aria-current="page"{% endif %}>Ejercicios</a>
             <a href="{% url 'historial_sesiones' %}"{% if request.resolver_match.url_name == 'historial_sesiones' %} aria-current="page"{% endif %}>Historial</a>
             <a href="{% url 'crear_entrenamiento' %}"{% if request.resolver_match.url_name == 'crear_entrenamiento' %} aria-current="page"{% endif %}>Nueva rutina</a>
+            {% if user.is_staff %}<a href="{% url 'panel_admin:inicio' %}">Administración</a>{% endif %}
             {% endif %}
             <form method="post" action="{% url 'logout' %}" class="logout-form">{% csrf_token %}<button class="button" type="submit">Salir</button></form>
         </div>
