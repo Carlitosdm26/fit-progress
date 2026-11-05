@@ -93,7 +93,7 @@ Antes de desplegar la migración que unifica las tablas, haz una copia de seguri
 
 En `/admin/`, el panel de operaciones permite buscar y editar usuarios, el catálogo de ejercicios, las rutinas y las sesiones. Desde la ficha de un usuario se consultan sus rutinas y sus diez sesiones más recientes; desde una rutina se ven los usuarios asignados y se pueden abrir sus sesiones. El listado de sesiones se puede filtrar por usuario y por rutina para localizar cualquier registro.
 
-Las rutinas permiten asignarse a usuarios activos y ordenar sus ejercicios. Al añadir un ejercicio a una rutina, también se incorpora a las selecciones de sus usuarios asignados. En una sesión se pueden corregir la fecha y las notas, y añadir o editar series. Los ejercicios del catálogo se pueden pausar sin borrar el historial asociado.
+Las rutinas permiten asignarse y desasignarse de usuarios activos y ordenar sus ejercicios. Desasignar una rutina la oculta de la cuenta del usuario, pero conserva sus sesiones e historial; volver a asignarla reactiva la vinculación existente. Al añadir un ejercicio a una rutina, también se incorpora a las selecciones de sus usuarios asignados. En una sesión se pueden corregir la fecha y las notas, y añadir o editar series. Los ejercicios del catálogo se pueden pausar sin borrar el historial asociado.
 
 ## Flujo de usuario
 
