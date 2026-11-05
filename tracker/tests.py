@@ -2,6 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from django.db import IntegrityError, connection
+from django.contrib.auth.models import Group
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
@@ -212,6 +213,8 @@ class AutenticacionYRutinasTests(TestCase):
 			email="usuario@example.com",
 			password="UnaClaveSegura123!",
 		)
+		grupo = Group.objects.create(name="Gimnasio")
+		user.groups.add(grupo)
 		entrenamiento = Entrenamiento.objects.create(nombre="Rutina vinculada")
 		asignacion = UsuarioEntrenamiento.objects.create(
 			usuario=user, entrenamiento=entrenamiento
@@ -235,10 +238,38 @@ class AutenticacionYRutinasTests(TestCase):
 		user.refresh_from_db()
 		self.assertEqual(user.username, "usuario-editado")
 		self.assertTrue(user.check_password("nQ7!xL4#vB9@zC2"))
+		self.assertTrue(user.groups.filter(pk=grupo.pk).exists())
 		self.assertTrue(UsuarioEntrenamiento.objects.filter(pk=asignacion.pk, usuario=user).exists())
 
 
 class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
+	def test_user_edit_does_not_depend_on_group_join_table(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="UnaClaveSegura123!",
+		)
+		user = get_user_model().objects.create_user(
+			username="usuario",
+			email="usuario@example.com",
+			password="UnaClaveSegura123!",
+		)
+		group_through = get_user_model()._meta.get_field("groups").remote_field.through
+		self.client.force_login(admin_user)
+		self.client.raise_request_exception = False
+
+		with connection.schema_editor() as schema_editor:
+			schema_editor.delete_model(group_through)
+		try:
+			response = self.client.get(
+				reverse("panel_admin:usuario_editar", args=[user.pk])
+			)
+		finally:
+			with connection.schema_editor() as schema_editor:
+				schema_editor.create_model(group_through)
+
+		self.assertEqual(response.status_code, 200)
+
 	def test_missing_profile_table_does_not_break_admin_and_migration_restores_it(self):
 		from django.apps import apps
 
