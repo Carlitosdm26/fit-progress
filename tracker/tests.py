@@ -124,7 +124,7 @@ class AutenticacionYRutinasTests(TestCase):
 
 
 class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
-	def test_migration_recreates_missing_profile_table_for_admin(self):
+	def test_missing_profile_table_does_not_break_admin_and_migration_restores_it(self):
 		from django.apps import apps
 
 		admin_user = get_user_model().objects.create_superuser(
@@ -150,7 +150,7 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 			schema_editor.delete_model(profile_model)
 
 		response = self.client.get(change_url)
-		self.assertEqual(response.status_code, 500)
+		self.assertEqual(response.status_code, 200)
 
 		with connection.schema_editor() as schema_editor:
 			migration.ensure_perfilusuario_table(apps, schema_editor)
