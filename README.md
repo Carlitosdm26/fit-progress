@@ -61,7 +61,7 @@ La forma recomendada de arrancar la aplicación es:
 ./run.sh
 ```
 
-El script verifica Python y `.env`, crea `.venv` si falta, instala dependencias, comprueba Django, aplica migraciones y arranca el servidor local en `0.0.0.0:8000`.
+El script verifica Python y `.env`, crea `.venv` si falta, instala dependencias, comprueba Django, aplica migraciones y arranca el servidor local en `0.0.0.0:8000`. En un despliegue nuevo, `migrate` crea las tablas de la aplicación dentro de la base configurada. La base MySQL indicada por `DB_NAME` debe existir previamente y el usuario configurado necesita permisos para crear y modificar tablas.
 
 Pulsa `Ctrl+C` para detener el servidor limpiamente.
 
@@ -99,14 +99,14 @@ Las rutinas permiten asignarse y desasignarse de usuarios activos y ordenar sus 
 
 1. El usuario inicia sesión en `/login/`.
 2. En el dashboard pulsa `Crear entrenamiento`.
-3. Escribe el nombre y selecciona los ejercicios. El desplegable permite filtrar por grupo muscular.
+3. Escribe el nombre y, si quieres, selecciona ejercicios. También puedes dejar la rutina vacía y completarla desde `Ejercicios`.
 4. En `Mis rutinas` pulsa `Registrar sesión`.
 5. Selecciona un ejercicio, indica el número de series y completa las repeticiones y el peso.
 6. Guarda el ejercicio y vuelve a la misma sesión para añadir el siguiente.
 7. Para corregir un ejercicio ya guardado, pulsa `Editar ejercicio`.
 8. Para modificar una rutina o una sesión, entra en su pantalla de edición.
 
-Desde `Ejercicios`, cualquier usuario con sesión iniciada y cuenta activa puede añadir ejercicios al catálogo compartido. Los nombres duplicados no se aceptan.
+Desde `Ejercicios`, cualquier usuario con sesión iniciada y cuenta activa puede añadir ejercicios al catálogo compartido. Al desplegar un ejercicio, puede añadirlo a cualquiera de sus rutinas activas donde todavía no esté. Las rutinas son compartidas: cualquier usuario asignado puede añadir ejercicios, y el cambio aparece en las asignaciones de los demás usuarios de esa rutina. Los nombres duplicados no se aceptan.
 
 Ejemplo:
 

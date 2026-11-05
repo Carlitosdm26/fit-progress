@@ -258,10 +258,16 @@ def ejercicio_anadir_a_rutina(request, ejercicio_id):
 				ejercicio=ejercicio,
 				orden=ultimo_orden + 1,
 			)
-		_, creada = UsuarioEntrenamientoEjercicio.objects.get_or_create(
-			usuario_entrenamiento=asignacion,
-			entrenamiento_ejercicio=entrada,
-		)
+		creada = False
+		for otra_asignacion in UsuarioEntrenamiento.objects.filter(
+			entrenamiento=entrenamiento
+		):
+			_, seleccion_creada = UsuarioEntrenamientoEjercicio.objects.get_or_create(
+				usuario_entrenamiento=otra_asignacion,
+				entrenamiento_ejercicio=entrada,
+			)
+			if otra_asignacion.pk == asignacion.pk:
+				creada = seleccion_creada
 	if creada:
 		messages.success(request, f"{ejercicio.nombre} se añadió a {entrenamiento.nombre}.")
 	else:

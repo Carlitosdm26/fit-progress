@@ -779,6 +779,14 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 		self.assertRedirects(respuesta, reverse("dashboard"))
 		asignacion = UsuarioEntrenamiento.objects.get(usuario=cuenta)
 		self.assertEqual(asignacion.ejercicios_elegidos.count(), 0)
+		otro_usuario = get_user_model().objects.create_user(
+			username="asignado@example.com",
+			email="asignado@example.com",
+			password="UnaClaveSegura123!",
+		)
+		otra_asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=otro_usuario, entrenamiento=asignacion.entrenamiento
+		)
 
 		ejercicio = Ejercicio.objects.create(
 			nombre="Press militar", grupo_muscular="Hombros", activo=True
@@ -804,6 +812,13 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 				entrenamiento_ejercicio=entrada,
 			).exists()
 		)
+		self.assertTrue(
+			UsuarioEntrenamientoEjercicio.objects.filter(
+				usuario_entrenamiento=otra_asignacion,
+				entrenamiento_ejercicio=entrada,
+			).exists()
+		)
+		self.assertEqual(otra_asignacion.ejercicios_elegidos.count(), 1)
 
 		respuesta = self.client.post(
 			reverse("ejercicio_anadir_a_rutina", args=[ejercicio.pk]),
