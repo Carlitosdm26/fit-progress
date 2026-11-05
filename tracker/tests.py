@@ -763,6 +763,89 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 		self.assertEqual(asignacion.entrenamiento.nombre, "Pecho fuerte")
 		self.assertEqual(asignacion.ejercicios_elegidos.count(), 1)
 
+	def test_usuario_puede_crear_rutina_vacia_y_anadir_ejercicio_desde_catalogo(self):
+		cuenta = get_user_model().objects.create_user(
+			username="rutina-vacia@example.com",
+			email="rutina-vacia@example.com",
+			password="UnaClaveSegura123!",
+		)
+		self.client.force_login(cuenta)
+
+		respuesta = self.client.post(
+			reverse("crear_entrenamiento"),
+			{"nombre": "Rutina progresiva", "descripcion": "La completaré después."},
+		)
+
+		self.assertRedirects(respuesta, reverse("dashboard"))
+		asignacion = UsuarioEntrenamiento.objects.get(usuario=cuenta)
+		self.assertEqual(asignacion.ejercicios_elegidos.count(), 0)
+
+		ejercicio = Ejercicio.objects.create(
+			nombre="Press militar", grupo_muscular="Hombros", activo=True
+		)
+		respuesta = self.client.get(reverse("ejercicios"))
+		self.assertContains(respuesta, "Selecciona un ejercicio para añadirlo a una rutina.")
+		self.assertContains(respuesta, f'value="{asignacion.pk}"')
+
+		respuesta = self.client.post(
+			reverse("ejercicio_anadir_a_rutina", args=[ejercicio.pk]),
+			{"asignacion": asignacion.pk},
+		)
+
+		self.assertRedirects(respuesta, reverse("ejercicios"))
+		self.assertEqual(asignacion.ejercicios_elegidos.count(), 1)
+		entrada = EntrenamientoEjercicio.objects.get(
+			entrenamiento=asignacion.entrenamiento, ejercicio=ejercicio
+		)
+		self.assertEqual(entrada.orden, 1)
+		self.assertTrue(
+			UsuarioEntrenamientoEjercicio.objects.filter(
+				usuario_entrenamiento=asignacion,
+				entrenamiento_ejercicio=entrada,
+			).exists()
+		)
+
+		respuesta = self.client.post(
+			reverse("ejercicio_anadir_a_rutina", args=[ejercicio.pk]),
+			{"asignacion": asignacion.pk},
+			follow=True,
+		)
+		self.assertContains(respuesta, "ya está en Rutina progresiva.")
+		self.assertEqual(asignacion.ejercicios_elegidos.count(), 1)
+
+	def test_usuario_no_puede_anadir_ejercicio_a_rutina_ajena(self):
+		usuario = get_user_model().objects.create_user(
+			username="propietario@example.com",
+			email="propietario@example.com",
+			password="UnaClaveSegura123!",
+		)
+		otro_usuario = get_user_model().objects.create_user(
+			username="ajeno@example.com",
+			email="ajeno@example.com",
+			password="UnaClaveSegura123!",
+		)
+		entrenamiento = Entrenamiento.objects.create(nombre="Rutina privada")
+		asignacion_ajena = UsuarioEntrenamiento.objects.create(
+			usuario=otro_usuario, entrenamiento=entrenamiento
+		)
+		ejercicio = Ejercicio.objects.create(
+			nombre="Elevación lateral", grupo_muscular="Hombros", activo=True
+		)
+		self.client.force_login(usuario)
+
+		respuesta = self.client.post(
+			reverse("ejercicio_anadir_a_rutina", args=[ejercicio.pk]),
+			{"asignacion": asignacion_ajena.pk},
+			follow=True,
+		)
+
+		self.assertContains(respuesta, "Selecciona una de tus rutinas activas")
+		self.assertFalse(
+			EntrenamientoEjercicio.objects.filter(
+				entrenamiento=entrenamiento, ejercicio=ejercicio
+			).exists()
+		)
+
 	def test_editar_rutina_muestra_marcados_los_ejercicios_asignados(self):
 		cuenta = get_user_model().objects.create_user(
 			username="rutina@example.com",

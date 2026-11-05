@@ -14,17 +14,43 @@
 			<div>
 				<div class="eyebrow">{{ ejercicios|length }} movimientos</div>
 				<h2 id="catalog-title">Catálogo</h2>
+				<p class="muted">Selecciona un ejercicio para añadirlo a una rutina.</p>
 			</div>
 		</div>
 		<ul class="exercise-list">
 			{% for ejercicio in ejercicios %}
 			<li class="exercise-card">
-				<span class="exercise-index" aria-hidden="true">{{ forloop.counter|stringformat:"02d" }}</span>
-				<div class="exercise-info">
-					<strong>{{ ejercicio.nombre }}</strong>
-					<div class="meta">{{ ejercicio.grupo_muscular }}{% if ejercicio.equipamiento %} · {{ ejercicio.equipamiento }}{% endif %}</div>
-					{% if ejercicio.descripcion %}<p>{{ ejercicio.descripcion }}</p>{% endif %}
-				</div>
+				<details class="exercise-picker">
+					<summary class="exercise-summary">
+						<span class="exercise-index" aria-hidden="true">{{ forloop.counter|stringformat:"02d" }}</span>
+						<span class="exercise-info">
+							<strong>{{ ejercicio.nombre }}</strong>
+							<span class="meta">{{ ejercicio.grupo_muscular }}{% if ejercicio.equipamiento %} · {{ ejercicio.equipamiento }}{% endif %}</span>
+							{% if ejercicio.descripcion %}<span class="exercise-description">{{ ejercicio.descripcion }}</span>{% endif %}
+						</span>
+						<span class="exercise-toggle" aria-hidden="true"></span>
+					</summary>
+					<div class="exercise-add-panel">
+						{% if ejercicio.rutinas_disponibles %}
+						<form method="post" action="{% url 'ejercicio_anadir_a_rutina' ejercicio.pk %}">
+							{% csrf_token %}
+							<label for="rutina-{{ ejercicio.pk }}">Añadir a una rutina</label>
+							<select id="rutina-{{ ejercicio.pk }}" name="asignacion" required>
+								<option value="" selected disabled>Selecciona una rutina</option>
+								{% for asignacion in ejercicio.rutinas_disponibles %}
+								<option value="{{ asignacion.pk }}">{{ asignacion.entrenamiento.nombre }}</option>
+								{% endfor %}
+							</select>
+							<button class="button small" type="submit">Añadir ejercicio</button>
+						</form>
+						{% elif asignaciones %}
+						<p class="muted">Este ejercicio ya está añadido a todas tus rutinas activas.</p>
+						{% else %}
+						<p class="muted">Crea una rutina primero para poder añadir este ejercicio.</p>
+						<a class="button small" href="{% url 'crear_entrenamiento' %}">Crear rutina</a>
+						{% endif %}
+					</div>
+				</details>
 			</li>
 			{% empty %}
 			<li class="empty-state">Aún no hay ejercicios en el catálogo.</li>

@@ -381,14 +381,27 @@ class EntrenamientoForm(forms.Form):
 	ejercicios = forms.ModelMultipleChoiceField(
 		label="Ejercicios",
 		queryset=Ejercicio.objects.none(),
-		required=True,
+		required=False,
 		widget=forms.CheckboxSelectMultiple,
-		help_text="Selecciona al menos un ejercicio.",
+		help_text="Puedes dejar la rutina vacía y añadir ejercicios después desde el catálogo.",
 	)
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 		self.fields["ejercicios"].queryset = Ejercicio.objects.filter(activo=True)
+
+
+class AgregarEjercicioARutinaForm(forms.Form):
+	asignacion = forms.ModelChoiceField(
+		label="Rutina",
+		queryset=UsuarioEntrenamiento.objects.none(),
+	)
+
+	def __init__(self, usuario, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.fields["asignacion"].queryset = UsuarioEntrenamiento.objects.filter(
+			usuario=usuario, activa=True
+		).select_related("entrenamiento")
 
 
 class EjercicioForm(forms.ModelForm):
