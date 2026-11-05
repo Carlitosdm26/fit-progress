@@ -17,7 +17,24 @@
     <h2>Ejercicios guardados</h2>
     <ul>
     {% for guardado in guardados %}
-        <li><strong>{{ guardado.ejercicio.nombre }}</strong><div class="meta">{% for serie in guardado.series %}Serie {{ serie.numero_serie }}: {{ serie.repeticiones }} repeticiones · {{ serie.peso }} kg{% if not forloop.last %}<br>{% endif %}{% endfor %}</div><div class="actions"><a class="button secondary" href="{% url 'editar_sesion' sesion.id %}?ejercicio={{ guardado.seleccion.id }}">Editar ejercicio</a><form method="post" action="{% url 'eliminar_ejercicio_sesion' sesion.id guardado.seleccion.id %}" onsubmit="return confirm('¿Eliminar este ejercicio de la sesión?');">{% csrf_token %}<button class="button danger" type="submit">Eliminar ejercicio</button></form></div></li>
+        <li>
+            <strong>{{ guardado.ejercicio.nombre }}</strong>
+            <div class="session-sets">
+                {% for serie in guardado.series %}
+                <div class="session-set">
+                    <span><strong>Serie {{ serie.numero_serie }}</strong><small>{{ serie.repeticiones }} repeticiones · {{ serie.peso }} kg</small></span>
+                    <form method="post" action="{% url 'eliminar_serie_sesion' sesion.id serie.id %}" onsubmit="return confirm('¿Eliminar la serie {{ serie.numero_serie }} de {{ guardado.ejercicio.nombre }}?');">
+                        {% csrf_token %}
+                        <button class="button danger small" type="submit" aria-label="Eliminar serie {{ serie.numero_serie }} de {{ guardado.ejercicio.nombre }}">Eliminar serie</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="actions">
+                <a class="button secondary" href="{% url 'editar_sesion' sesion.id %}?ejercicio={{ guardado.seleccion.id }}">Editar ejercicio</a>
+                <form method="post" action="{% url 'eliminar_ejercicio_sesion' sesion.id guardado.seleccion.id %}" onsubmit="return confirm('¿Eliminar este ejercicio de la sesión?');">{% csrf_token %}<button class="button danger" type="submit">Eliminar ejercicio</button></form>
+            </div>
+        </li>
     {% endfor %}
     </ul>
 </section>
@@ -62,7 +79,13 @@
     {% if sesion %}<form method="post" action="{% url 'eliminar_sesion' sesion.id %}" onsubmit="return confirm('¿Eliminar toda esta sesión?');">{% csrf_token %}<button class="button danger" type="submit">Eliminar sesión completa</button></form>{% endif %}
 <style>
     .set-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; border-top: 1px solid #c9c4b9; padding-top: 8px; }
+    .session-sets { margin-top: 10px; }
+    .session-set { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+    .session-set > span { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+    .session-set small { color: var(--muted); font: .8rem "DM Sans", sans-serif; }
+    .session-set form { flex: 0 0 auto; }
     @media (max-width: 600px) { .set-row { grid-template-columns: 1fr; gap: 0; } }
+    @media (max-width: 420px) { .session-set { align-items: flex-start; flex-direction: column; } .session-set form, .session-set .button { width: 100%; } }
 </style>
 <script>
     const numeroSeries = document.getElementById("{{ form.numero_series.id_for_label }}");

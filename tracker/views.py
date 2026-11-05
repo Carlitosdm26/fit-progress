@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -30,6 +30,7 @@ from .models import (
 	UsuarioEntrenamiento,
 	UsuarioEntrenamientoEjercicio,
 )
+from .services import eliminar_serie_y_reenumerar
 
 logger = logging.getLogger("tracker")
 
@@ -157,7 +158,17 @@ def historial_sesiones(request):
 		return render(request, "tracker/sin_perfil.html")
 	sesiones = SesionEntrenamiento.objects.select_related(
 		"usuario_entrenamiento__entrenamiento"
-	).filter(usuario_entrenamiento__usuario=perfil).prefetch_related("series").order_by("-fecha")
+	).filter(usuario_entrenamiento__usuario=perfil).prefetch_related(
+		Prefetch(
+			"series",
+			queryset=Serie.objects.select_related(
+				"usuario_entrenamiento_ejercicio__entrenamiento_ejercicio__ejercicio"
+			).order_by(
+				"usuario_entrenamiento_ejercicio__entrenamiento_ejercicio__orden",
+				"numero_serie",
+			),
+		)
+	).order_by("-fecha")
 	historial = []
 	por_dia = defaultdict(list)
 	for sesion in sesiones:
@@ -469,6 +480,29 @@ def eliminar_ejercicio_sesion(request, sesion_id, seleccion_id):
 	if deleted:
 		messages.success(request, "Ejercicio eliminado de la sesión.")
 	return redirect("editar_sesion", sesion_id=sesion_id)
+
+
+@login_required
+@active_user_required
+@require_POST
+def eliminar_serie_sesion(request, sesion_id, serie_id):
+	perfil = perfil_actual(request)
+	if perfil is None:
+		return redirect("login")
+	sesion = SesionEntrenamiento.objects.filter(
+		pk=sesion_id, usuario_entrenamiento__usuario=perfil
+	).first()
+	if sesion is None:
+		messages.error(request, "No se encontró esa sesión.")
+		return redirect("dashboard")
+	serie = Serie.objects.filter(pk=serie_id, sesion_entrenamiento=sesion).first()
+	if serie is not None:
+		ejercicio = serie.usuario_entrenamiento_ejercicio.entrenamiento_ejercicio.ejercicio.nombre
+		eliminar_serie_y_reenumerar(serie)
+		messages.success(request, f"Serie eliminada de {ejercicio}.")
+	else:
+		messages.error(request, "No se encontró esa serie en la sesión.")
+	return redirect("editar_sesion", sesion_id=sesion.pk)
 
 
 def guardar_series(sesion, form):
