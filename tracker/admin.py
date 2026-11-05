@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
+from django.db import connection
 from django.utils.translation import gettext_lazy as _
 
 from .models import (
@@ -64,6 +65,11 @@ class UsuarioAdmin(UserAdmin):
 		(_("Important dates"), {"fields": ("last_login", "date_joined")}),
 	)
 	inlines = (PerfilUsuarioInline,)
+
+	def get_inline_instances(self, request, obj=None):
+		if PerfilUsuario._meta.db_table not in connection.introspection.table_names():
+			return []
+		return super().get_inline_instances(request, obj)
 
 
 admin.site.register(get_user_model(), UsuarioAdmin)
