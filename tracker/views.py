@@ -204,7 +204,7 @@ def ejercicios(request):
 	ejercicios_por_asignacion = {
 		asignacion.pk: {
 			seleccion.entrenamiento_ejercicio.ejercicio_id
-			for seleccion in asignacion.ejercicios_elegidos.all()
+			for seleccion in asignacion.ejercicios_elegidos.filter(activo=True)
 		}
 		for asignacion in asignaciones
 	}
@@ -258,16 +258,14 @@ def ejercicio_anadir_a_rutina(request, ejercicio_id):
 				ejercicio=ejercicio,
 				orden=ultimo_orden + 1,
 			)
-		creada = False
-		for otra_asignacion in UsuarioEntrenamiento.objects.filter(
-			entrenamiento=entrenamiento
-		):
-			_, seleccion_creada = UsuarioEntrenamientoEjercicio.objects.get_or_create(
-				usuario_entrenamiento=otra_asignacion,
-				entrenamiento_ejercicio=entrada,
-			)
-			if otra_asignacion.pk == asignacion.pk:
-				creada = seleccion_creada
+		seleccion, creada = UsuarioEntrenamientoEjercicio.objects.get_or_create(
+			usuario_entrenamiento=asignacion,
+			entrenamiento_ejercicio=entrada,
+		)
+		if not creada and not seleccion.activo:
+			seleccion.activo = True
+			seleccion.save(update_fields=["activo"])
+			creada = True
 	if creada:
 		messages.success(request, f"{ejercicio.nombre} se añadió a {entrenamiento.nombre}.")
 	else:
@@ -347,7 +345,20 @@ def editar_entrenamiento(request, asignacion_id):
 	if asignacion is None:
 		return redirect("dashboard")
 	entrenamiento = asignacion.entrenamiento
-	seleccionados = list(entrenamiento.ejercicios.values_list("ejercicio_id", flat=True))
+	selecciones = list(
+		asignacion.ejercicios_elegidos.select_related(
+			"entrenamiento_ejercicio__ejercicio"
+		)
+	)
+	seleccionadas_activas = [
+		seleccion
+		for seleccion in selecciones
+		if seleccion.activo
+	]
+	seleccionados = [
+		seleccion.entrenamiento_ejercicio.ejercicio_id
+		for seleccion in seleccionadas_activas
+	]
 	form = EntrenamientoForm(
 		request.POST or None,
 		initial={
@@ -367,10 +378,41 @@ def editar_entrenamiento(request, asignacion_id):
 			entrenamiento.nombre = form.cleaned_data["nombre"]
 			entrenamiento.descripcion = form.cleaned_data["descripcion"]
 			entrenamiento.save(update_fields=["nombre", "descripcion"])
-			existing_ids = set(seleccionados)
-			max_order = entrenamiento.ejercicios.count()
+			selected_ids = {
+				ejercicio.pk for ejercicio in form.cleaned_data["ejercicios"]
+			}
+			active_by_exercise = {
+				seleccion.entrenamiento_ejercicio.ejercicio_id: seleccion
+				for seleccion in seleccionadas_activas
+			}
+			for ejercicio_id, seleccion in active_by_exercise.items():
+				if ejercicio_id in selected_ids:
+					continue
+				if seleccion.series.exists():
+					seleccion.activo = False
+					seleccion.save(update_fields=["activo"])
+				else:
+					entrada = seleccion.entrenamiento_ejercicio
+					seleccion.delete()
+					entrada.delete()
+			inactive_by_exercise = {
+				seleccion.entrenamiento_ejercicio.ejercicio_id: seleccion
+				for seleccion in selecciones
+				if not seleccion.activo
+			}
+			max_order = (
+				entrenamiento.ejercicios.order_by("-orden")
+				.values_list("orden", flat=True)
+				.first()
+				or 0
+			)
 			for ejercicio in form.cleaned_data["ejercicios"]:
-				if ejercicio.pk in existing_ids:
+				if ejercicio.pk in active_by_exercise:
+					continue
+				seleccion = inactive_by_exercise.get(ejercicio.pk)
+				if seleccion is not None:
+					seleccion.activo = True
+					seleccion.save(update_fields=["activo"])
 					continue
 				max_order += 1
 				entrenamiento_ejercicio = EntrenamientoEjercicio.objects.create(
@@ -418,7 +460,7 @@ def eliminar_entrenamiento(request, asignacion_id):
 	with transaction.atomic():
 		SesionEntrenamiento.objects.filter(usuario_entrenamiento=asignacion).delete()
 		asignacion.delete()
-		if not entrenamiento.usuarios.exists():
+		if not entrenamiento.es_plantilla and not entrenamiento.usuarios.exists():
 			entrenamiento.delete()
 	messages.success(request, "Rutina eliminada correctamente.")
 	return redirect("dashboard")
@@ -499,7 +541,14 @@ def editar_sesion(request, sesion_id):
 			sesion.series.filter(usuario_entrenamiento_ejercicio=seleccion).order_by("numero_serie")
 		)
 		if series:
-			guardados.append({"ejercicio": seleccion.entrenamiento_ejercicio.ejercicio, "seleccion": seleccion, "series": series})
+			guardados.append(
+				{
+					"ejercicio": seleccion.entrenamiento_ejercicio.ejercicio,
+					"seleccion": seleccion,
+					"series": series,
+					"editable": seleccion.activo,
+				}
+			)
 	if request.method == "POST" and form.is_valid():
 		with transaction.atomic():
 			sesion.notas = form.cleaned_data["notas"]

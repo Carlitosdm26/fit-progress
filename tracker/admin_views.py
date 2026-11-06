@@ -30,7 +30,7 @@ from .models import (
 	UsuarioEntrenamiento,
 	UsuarioEntrenamientoEjercicio,
 )
-from .services import eliminar_serie_y_reenumerar
+from .services import copiar_plantilla_para_usuario, eliminar_serie_y_reenumerar
 
 
 def staff_required(view_func):
@@ -190,8 +190,8 @@ def ejercicio_editar(request, ejercicio_id):
 @staff_required
 def entrenamientos(request):
 	query = request.GET.get("q", "").strip()
-	queryset = Entrenamiento.objects.annotate(
-		usuarios_count=Count("usuarios", distinct=True),
+	queryset = Entrenamiento.objects.filter(es_plantilla=True).annotate(
+		usuarios_count=Count("copias__usuarios", distinct=True),
 		ejercicios_count=Count("ejercicios", distinct=True),
 	).order_by("nombre")
 	if query:
@@ -209,6 +209,8 @@ def entrenamiento_nuevo(request):
 	form = AdminEntrenamientoForm(request.POST or None)
 	if request.method == "POST" and form.is_valid():
 		entrenamiento = form.save()
+		entrenamiento.es_plantilla = True
+		entrenamiento.save(update_fields=["es_plantilla"])
 		messages.success(request, f"La rutina {entrenamiento.nombre} se creó.")
 		return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
 	return render(
@@ -237,22 +239,25 @@ def entrenamiento_detalle(request, entrenamiento_id):
 		messages.success(request, "La rutina se actualizó.")
 		return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
 	if action == "asignar_usuario" and asignacion_form.is_valid():
+		if not entrenamiento.es_plantilla:
+			messages.error(request, "Solo se pueden asignar plantillas. Esta rutina es personal.")
+			return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
 		try:
 			with transaction.atomic():
-				asignacion, creada = UsuarioEntrenamiento.objects.get_or_create(
-					usuario=asignacion_form.cleaned_data["usuario"],
-					entrenamiento=entrenamiento,
-					defaults={"activa": True},
-				)
+				usuario = asignacion_form.cleaned_data["usuario"]
+				asignacion = UsuarioEntrenamiento.objects.filter(
+					usuario=usuario, entrenamiento__plantilla=entrenamiento
+				).select_related("entrenamiento").first()
+				creada = asignacion is None
+				if creada:
+					asignacion = copiar_plantilla_para_usuario(entrenamiento, usuario)
 				reactivada = not creada and not asignacion.activa
 				if reactivada:
 					asignacion.activa = True
 					asignacion.save(update_fields=["activa"])
-				for entrada in EntrenamientoEjercicio.objects.filter(entrenamiento=entrenamiento):
-					UsuarioEntrenamientoEjercicio.objects.get_or_create(
-						usuario_entrenamiento=asignacion,
-						entrenamiento_ejercicio=entrada,
-					)
+			if not creada and not reactivada:
+				messages.error(request, "Este usuario ya tiene asignada la rutina.")
+				return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
 		except IntegrityError:
 			messages.error(request, "Este usuario ya tiene asignada la rutina.")
 		else:
@@ -268,16 +273,30 @@ def entrenamiento_detalle(request, entrenamiento_id):
 				entrada = ejercicio_form.save(commit=False)
 				entrada.entrenamiento = entrenamiento
 				entrada.save()
-				for asignacion in UsuarioEntrenamiento.objects.filter(entrenamiento=entrenamiento):
-					UsuarioEntrenamientoEjercicio.objects.get_or_create(
-						usuario_entrenamiento=asignacion,
-						entrenamiento_ejercicio=entrada,
-					)
+				if not entrenamiento.es_plantilla:
+					for asignacion in UsuarioEntrenamiento.objects.filter(
+						entrenamiento=entrenamiento
+					):
+						UsuarioEntrenamientoEjercicio.objects.create(
+							usuario_entrenamiento=asignacion,
+							entrenamiento_ejercicio=entrada,
+						)
 		except IntegrityError:
 			messages.error(request, "No se pudo añadir: comprueba que el ejercicio y el orden no estén repetidos.")
 		else:
-			messages.success(request, "Ejercicio añadido a la rutina y sincronizado con sus usuarios.")
+			messages.success(
+				request,
+				"Ejercicio añadido a la plantilla."
+				if entrenamiento.es_plantilla
+				else "Ejercicio añadido a la rutina personal.",
+			)
 			return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
+	if entrenamiento.es_plantilla:
+		asignaciones = UsuarioEntrenamiento.objects.filter(
+			entrenamiento__plantilla=entrenamiento
+		)
+	else:
+		asignaciones = UsuarioEntrenamiento.objects.filter(entrenamiento=entrenamiento)
 	return render(
 		request,
 		"tracker/admin/entrenamiento_detalle.html",
@@ -286,12 +305,15 @@ def entrenamiento_detalle(request, entrenamiento_id):
 			"form": form,
 			"asignacion_form": asignacion_form,
 			"ejercicio_form": ejercicio_form,
-			"asignaciones": UsuarioEntrenamiento.objects.filter(entrenamiento=entrenamiento)
-			.select_related("usuario")
+			"asignaciones": asignaciones.select_related("usuario")
 			.annotate(sesiones_count=Count("sesiones", distinct=True)),
 			"ejercicios_rutina": EntrenamientoEjercicio.objects.filter(
 				entrenamiento=entrenamiento
-			).select_related("ejercicio").prefetch_related("elecciones__series"),
+			)
+			.select_related("ejercicio")
+			.annotate(selecciones_activas=Count("elecciones", filter=Q(elecciones__activo=True)))
+			.prefetch_related("elecciones__series"),
+			"es_plantilla": entrenamiento.es_plantilla,
 		},
 	)
 
@@ -301,7 +323,7 @@ def entrenamiento_detalle(request, entrenamiento_id):
 def entrenamiento_usuario_desasignar(request, entrenamiento_id, user_id):
 	asignacion = get_object_or_404(
 		UsuarioEntrenamiento.objects.select_related("usuario", "entrenamiento"),
-		entrenamiento_id=entrenamiento_id,
+		entrenamiento__plantilla_id=entrenamiento_id,
 		usuario_id=user_id,
 	)
 	if asignacion.activa:
@@ -356,12 +378,19 @@ def entrenamiento_ejercicio_eliminar(request, entrenamiento_id, entrada_id):
 		EntrenamientoEjercicio, pk=entrada_id, entrenamiento=entrenamiento
 	)
 	selecciones = UsuarioEntrenamientoEjercicio.objects.filter(entrenamiento_ejercicio=entrada)
-	if Serie.objects.filter(usuario_entrenamiento_ejercicio__in=selecciones).exists():
-		messages.error(request, "No se puede quitar: este ejercicio ya tiene series registradas.")
-	else:
-		with transaction.atomic():
-			selecciones.delete()
+	with transaction.atomic():
+		selecciones_con_historial = selecciones.filter(series__isnull=False).distinct()
+		tiene_historial = selecciones_con_historial.exists()
+		selecciones.filter(series__isnull=True).delete()
+		selecciones_con_historial.update(activo=False)
+		if not tiene_historial:
 			entrada.delete()
+	if tiene_historial:
+		messages.success(
+			request,
+			"Ejercicio retirado de futuras sesiones; el historial se ha conservado.",
+		)
+	else:
 		messages.success(request, "Ejercicio retirado de la rutina.")
 	return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
 
@@ -376,7 +405,14 @@ def sesiones(request):
 	if usuario_id.isdigit():
 		queryset = queryset.filter(usuario_entrenamiento__usuario_id=int(usuario_id))
 	if rutina_id.isdigit():
-		queryset = queryset.filter(usuario_entrenamiento__entrenamiento_id=int(rutina_id))
+		entrenamiento = Entrenamiento.objects.filter(pk=int(rutina_id)).first()
+		if entrenamiento is not None and entrenamiento.es_plantilla:
+			queryset = queryset.filter(
+				Q(usuario_entrenamiento__entrenamiento_id=entrenamiento.pk)
+				| Q(usuario_entrenamiento__entrenamiento__plantilla=entrenamiento)
+			)
+		else:
+			queryset = queryset.filter(usuario_entrenamiento__entrenamiento_id=int(rutina_id))
 	return render(
 		request,
 		"tracker/admin/sesiones.html",

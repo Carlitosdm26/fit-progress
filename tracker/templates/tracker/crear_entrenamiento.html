@@ -2,7 +2,7 @@
 {% block title %}{% if editando %}Editar rutina{% else %}Nueva rutina{% endif %} | Fit Progress{% endblock %}
 {% block content %}
 <div class="eyebrow">Tu rutina</div><h1>{% if editando %}Editar rutina{% else %}Crear entrenamiento{% endif %}</h1>
-<p class="muted">Elige ejercicios ahora o crea la rutina vacía y añádelos después desde el catálogo.</p>
+<p class="muted">Esta rutina es personal. Elige ejercicios ahora o créala vacía y añádelos después desde el catálogo; tus cambios no afectarán a otras personas.</p>
 <form method="post">{% csrf_token %}{{ form.non_field_errors }}
     <label for="id_nombre">{{ form.nombre.label }}</label>{{ form.nombre }}{{ form.nombre.errors }}
     <label for="id_descripcion">{{ form.descripcion.label }}</label>{{ form.descripcion }}{{ form.descripcion.errors }}

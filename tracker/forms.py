@@ -299,6 +299,16 @@ class AdminEntrenamientoEjercicioForm(forms.ModelForm):
 		cleaned_data = super().clean()
 		ejercicio = cleaned_data.get("ejercicio")
 		orden = cleaned_data.get("orden")
+		if (
+			self.instance.pk
+			and ejercicio
+			and ejercicio.pk != self.instance.ejercicio_id
+			and self.instance.elecciones.filter(series__isnull=False).exists()
+		):
+			self.add_error(
+				"ejercicio",
+				"No se puede cambiar el ejercicio porque ya tiene series en el historial.",
+			)
 		if ejercicio and EntrenamientoEjercicio.objects.filter(
 			entrenamiento=self.entrenamiento, ejercicio=ejercicio
 		).exclude(pk=self.instance.pk).exists():
@@ -356,9 +366,17 @@ class AdminSerieForm(forms.ModelForm):
 		self.sesion = sesion
 		self.fields["usuario_entrenamiento_ejercicio"].queryset = (
 			UsuarioEntrenamientoEjercicio.objects.filter(
-				usuario_entrenamiento=sesion.usuario_entrenamiento
+				usuario_entrenamiento=sesion.usuario_entrenamiento,
+				activo=True,
 			).select_related("entrenamiento_ejercicio__ejercicio")
 		)
+		if self.instance.pk:
+			self.fields["usuario_entrenamiento_ejercicio"].queryset |= (
+				UsuarioEntrenamientoEjercicio.objects.filter(
+					pk=self.instance.usuario_entrenamiento_ejercicio_id,
+					usuario_entrenamiento=sesion.usuario_entrenamiento,
+				).select_related("entrenamiento_ejercicio__ejercicio")
+			)
 
 	def clean(self):
 		cleaned_data = super().clean()
@@ -439,7 +457,7 @@ class SesionForm(forms.Form):
 		if sesion is not None:
 			for serie in sesion.series.all():
 				existing_series.setdefault(serie.usuario_entrenamiento_ejercicio_id, []).append(serie)
-		selecciones = asignacion.ejercicios_elegidos.select_related(
+		selecciones = asignacion.ejercicios_elegidos.filter(activo=True).select_related(
 			"entrenamiento_ejercicio__ejercicio"
 		)
 		for seleccion in selecciones:
@@ -542,7 +560,7 @@ class EjercicioSesionForm(forms.Form):
 		super().__init__(*args, **kwargs)
 		self.asignacion = asignacion
 		self.sesion = sesion
-		selecciones = asignacion.ejercicios_elegidos.select_related(
+		selecciones = asignacion.ejercicios_elegidos.filter(activo=True).select_related(
 			"entrenamiento_ejercicio__ejercicio"
 		)
 		selected_id = str(editar_seleccion_id) if editar_seleccion_id else None

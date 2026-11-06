@@ -1,6 +1,39 @@
 from django.db import transaction
 
-from .models import Serie
+from .models import (
+	Entrenamiento,
+	EntrenamientoEjercicio,
+	Serie,
+	UsuarioEntrenamiento,
+	UsuarioEntrenamientoEjercicio,
+)
+
+
+@transaction.atomic
+def copiar_plantilla_para_usuario(plantilla, usuario):
+	if not plantilla.es_plantilla:
+		raise ValueError("Solo se pueden asignar plantillas de rutina.")
+
+	entrenamiento = Entrenamiento.objects.create(
+		nombre=plantilla.nombre,
+		descripcion=plantilla.descripcion,
+		plantilla=plantilla,
+	)
+	asignacion = UsuarioEntrenamiento.objects.create(
+		usuario=usuario,
+		entrenamiento=entrenamiento,
+	)
+	for entrada in plantilla.ejercicios.all():
+		entrada_personal = EntrenamientoEjercicio.objects.create(
+			entrenamiento=entrenamiento,
+			ejercicio=entrada.ejercicio,
+			orden=entrada.orden,
+		)
+		UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion,
+			entrenamiento_ejercicio=entrada_personal,
+		)
+	return asignacion
 
 
 @transaction.atomic

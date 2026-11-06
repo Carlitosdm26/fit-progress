@@ -7,7 +7,7 @@ Aplicación web Django para gestionar rutinas de gimnasio y registrar el progres
 - Login individual para cada usuario.
 - Registro público con cuentas inactivas hasta que un administrador las active.
 - Catálogo compartido de ejercicios, filtrable por grupo muscular y ampliable por cualquier usuario con una cuenta activa.
-- Creación y edición de rutinas.
+- Creación y edición de rutinas personales y plantillas administradas.
 - Registro progresivo de una sesión: se guarda un ejercicio cada vez.
 - Número variable de series por ejercicio, con repeticiones y peso decimal en kilogramos.
 - Edición de ejercicios ya registrados dentro de una sesión.
@@ -93,7 +93,7 @@ Antes de desplegar la migración que unifica las tablas, haz una copia de seguri
 
 En `/admin/`, el panel de operaciones permite buscar usuarios, editar el catálogo de ejercicios, las rutinas y las sesiones. La acción `Ver` abre la ficha de solo lectura de cada usuario, con sus rutinas y sus diez sesiones más recientes; la edición de cuenta queda como acción aparte. Desde una rutina se ven los usuarios asignados y se pueden abrir sus sesiones. El listado de sesiones se puede filtrar por usuario y por rutina para localizar cualquier registro. En móvil, el menú se abre con el botón de tres líneas y la barra superior incluye un acceso de vuelta a la aplicación.
 
-Las rutinas permiten asignarse y desasignarse de usuarios activos y ordenar sus ejercicios. Desasignar una rutina la oculta de la cuenta del usuario, pero conserva sus sesiones e historial; volver a asignarla reactiva la vinculación existente. Al añadir un ejercicio a una rutina, también se incorpora a las selecciones de sus usuarios asignados. En una sesión se pueden corregir la fecha y las notas, y añadir o editar series. Los ejercicios del catálogo se pueden pausar sin borrar el historial asociado.
+Las plantillas permiten asignarse a usuarios activos; cada asignación crea una copia personal independiente con los ejercicios de la plantilla en ese momento. Cambiar una plantilla afecta a nuevas copias, no a las ya asignadas. Desasignar una rutina personal la oculta de la cuenta, pero conserva sus sesiones e historial; volver a asignarla al mismo usuario reactiva su copia existente. En una sesión se pueden corregir la fecha y las notas, y añadir o editar series. Los ejercicios del catálogo se pueden pausar sin borrar el historial asociado.
 
 ## Flujo de usuario
 
@@ -106,7 +106,7 @@ Las rutinas permiten asignarse y desasignarse de usuarios activos y ordenar sus 
 7. Para corregir un ejercicio ya guardado, pulsa `Editar ejercicio`.
 8. Para modificar una rutina o una sesión, entra en su pantalla de edición.
 
-Desde `Ejercicios`, cualquier usuario con sesión iniciada y cuenta activa puede añadir ejercicios al catálogo compartido. Al desplegar un ejercicio, puede añadirlo a cualquiera de sus rutinas activas donde todavía no esté. Las rutinas son compartidas: cualquier usuario asignado puede añadir ejercicios, y el cambio aparece en las asignaciones de los demás usuarios de esa rutina. Los nombres duplicados no se aceptan.
+Desde `Ejercicios`, cualquier usuario con sesión iniciada y cuenta activa puede añadir ejercicios al catálogo compartido. Al desplegar un ejercicio, puede añadirlo a cualquiera de sus rutinas activas donde todavía no esté; el cambio solo afecta a esa rutina personal. También puede añadir o quitar ejercicios desde la edición de su rutina. Si quita un ejercicio que ya tiene series registradas, deja de estar disponible para futuras sesiones, pero el historial anterior permanece visible. Los nombres duplicados no se aceptan.
 
 Ejemplo:
 
@@ -132,13 +132,15 @@ Las acciones de borrado se realizan mediante `POST` y requieren autenticación. 
 ## Modelo principal
 
 - `User` de Django: datos de acceso y perfil deportivo en una sola cuenta.
-- `Entrenamiento`: rutina reutilizable.
+- `Entrenamiento`: plantilla o rutina personal.
 - `Ejercicio`: catálogo de ejercicios.
 - `UsuarioEntrenamiento`: asignación de una rutina a un usuario.
 - `EntrenamientoEjercicio`: ejercicios incluidos en una rutina y su orden.
 - `UsuarioEntrenamientoEjercicio`: ejercicio elegido por el usuario para esa rutina.
 - `SesionEntrenamiento`: una realización concreta de una rutina.
 - `Serie`: repeticiones, peso y número de serie realizados.
+
+Al asignar una plantilla, Fit Progress crea un `Entrenamiento` independiente para ese usuario y copia sus ejercicios. Cada copia conserva una referencia a la plantilla de origen, pero sus cambios no se propagan a otras copias.
 
 El peso se almacena como decimal y la unidad inicial es el kilogramo. Las restricciones de base de datos evitan relaciones y series duplicadas.
 

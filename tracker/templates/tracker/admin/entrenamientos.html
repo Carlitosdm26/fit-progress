@@ -1,7 +1,7 @@
 {% extends "tracker/admin/base.html" %}
 {% block title %}Rutinas | Administración{% endblock %}
 {% block content %}
-<div class="heading"><div><div class="eyebrow">Programas de entrenamiento</div><h1>Rutinas</h1><p>{{ page_obj.paginator.count }} rutinas compartidas</p></div><a class="button" href="{% url 'panel_admin:entrenamiento_nuevo' %}">Crear rutina</a></div>
+<div class="heading"><div><div class="eyebrow">Programas de entrenamiento</div><h1>Plantillas</h1><p>{{ page_obj.paginator.count }} plantillas compartidas; cada asignación crea una copia personal.</p></div><a class="button" href="{% url 'panel_admin:entrenamiento_nuevo' %}">Crear plantilla</a></div>
 <form class="filters" method="get"><div class="field"><label for="id_q">Buscar rutina</label><input id="id_q" name="q" type="search" value="{{ query }}" placeholder="Nombre o descripción"></div><button class="button secondary" type="submit">Buscar</button></form>
 <div class="table-wrap"><table><thead><tr><th>Rutina</th><th>Usuarios</th><th>Ejercicios</th><th>Creada</th><th></th></tr></thead><tbody>
 {% for rutina in page_obj %}<tr><td><strong>{{ rutina.nombre }}</strong><div class="help">{{ rutina.descripcion|default:"Sin descripción"|truncatechars:90 }}</div></td><td>{{ rutina.usuarios_count }}</td><td>{{ rutina.ejercicios_count }}</td><td>{{ rutina.fecha_creacion|date:"d/m/Y" }}</td><td><a class="row-link" href="{% url 'panel_admin:entrenamiento_detalle' rutina.pk %}">Abrir</a></td></tr>
