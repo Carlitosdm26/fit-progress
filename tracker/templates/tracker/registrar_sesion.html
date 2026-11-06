@@ -31,7 +31,7 @@
                 {% endfor %}
             </div>
             <div class="actions">
-                <a class="button secondary" href="{% url 'editar_sesion' sesion.id %}?ejercicio={{ guardado.seleccion.id }}">Editar ejercicio</a>
+                {% if guardado.editable %}<a class="button secondary" href="{% url 'editar_sesion' sesion.id %}?ejercicio={{ guardado.seleccion.id }}">Editar ejercicio</a>{% else %}<span class="muted">Ejercicio retirado de la rutina; historial conservado.</span>{% endif %}
                 <form method="post" action="{% url 'eliminar_ejercicio_sesion' sesion.id guardado.seleccion.id %}" onsubmit="return confirm('¿Eliminar este ejercicio de la sesión?');">{% csrf_token %}<button class="button danger" type="submit">Eliminar ejercicio</button></form>
             </div>
         </li>

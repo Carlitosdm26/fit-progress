@@ -2,6 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from django.db import IntegrityError, connection
+from django.db.migrations.executor import MigrationExecutor
 from django.contrib.auth.models import Group
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase, TransactionTestCase
@@ -276,30 +277,36 @@ class AutenticacionYRutinasTests(TestCase):
 			email="runner@example.com",
 			password="UnaClaveSegura123!",
 		)
-		entrenamiento = Entrenamiento.objects.create(nombre="Fuerza A")
-		asignacion = UsuarioEntrenamiento.objects.create(
-			usuario=usuario, entrenamiento=entrenamiento
+		entrenamiento = Entrenamiento.objects.create(
+			nombre="Fuerza A", es_plantilla=True
 		)
 		ejercicio = Ejercicio.objects.create(nombre="Sentadilla", grupo_muscular="Piernas")
-		entrada = EntrenamientoEjercicio.objects.create(
+		entrada_plantilla = EntrenamientoEjercicio.objects.create(
 			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
-		)
-		UsuarioEntrenamientoEjercicio.objects.create(
-			usuario_entrenamiento=asignacion, entrenamiento_ejercicio=entrada
 		)
 		self.client.force_login(admin_user)
 
 		respuesta = self.client.get(reverse("panel_admin:usuario_editar", args=[usuario.pk]))
-		self.assertContains(respuesta, "Fuerza A")
+		self.assertNotContains(respuesta, "Fuerza A")
 		respuesta = self.client.get(
 			reverse("panel_admin:usuario_detalle", args=[usuario.pk])
 		)
-		self.assertContains(respuesta, "Fuerza A")
+		self.assertNotContains(respuesta, "Fuerza A")
 		respuesta = self.client.get(
 			reverse("panel_admin:entrenamiento_detalle", args=[entrenamiento.pk])
 		)
-		self.assertContains(respuesta, "maratonista")
 		self.assertContains(respuesta, "Sentadilla")
+
+		respuesta = self.client.post(
+			reverse("panel_admin:entrenamiento_detalle", args=[entrenamiento.pk]),
+			{"action": "asignar_usuario", "usuario": usuario.pk},
+		)
+		self.assertEqual(respuesta.status_code, 302)
+		asignacion = UsuarioEntrenamiento.objects.get(usuario=usuario)
+		self.assertNotEqual(asignacion.entrenamiento_id, entrenamiento.pk)
+		self.assertEqual(asignacion.entrenamiento.plantilla_id, entrenamiento.pk)
+		entrada_personal = asignacion.entrenamiento.ejercicios.get()
+		self.assertEqual(entrada_personal.ejercicio, ejercicio)
 
 		respuesta = self.client.post(
 			reverse("panel_admin:ejercicio_nuevo"),
@@ -322,11 +329,13 @@ class AutenticacionYRutinasTests(TestCase):
 		entrada_nueva = EntrenamientoEjercicio.objects.get(
 			entrenamiento=entrenamiento, ejercicio=ejercicio_nuevo
 		)
-		self.assertTrue(
+		self.assertFalse(
 			UsuarioEntrenamientoEjercicio.objects.filter(
-				usuario_entrenamiento=asignacion, entrenamiento_ejercicio=entrada_nueva
+				usuario_entrenamiento=asignacion,
+				entrenamiento_ejercicio__ejercicio=ejercicio_nuevo,
 			).exists()
 		)
+		self.assertEqual(asignacion.entrenamiento.ejercicios.count(), 1)
 
 		nuevo_usuario = get_user_model().objects.create_user(
 			username="ciclista",
@@ -338,9 +347,9 @@ class AutenticacionYRutinasTests(TestCase):
 			{"action": "asignar_usuario", "usuario": nuevo_usuario.pk},
 		)
 		self.assertEqual(respuesta.status_code, 302)
-		nueva_asignacion = UsuarioEntrenamiento.objects.get(
-			usuario=nuevo_usuario, entrenamiento=entrenamiento
-		)
+		nueva_asignacion = UsuarioEntrenamiento.objects.get(usuario=nuevo_usuario)
+		self.assertEqual(nueva_asignacion.entrenamiento.plantilla_id, entrenamiento.pk)
+		self.assertNotEqual(nueva_asignacion.entrenamiento_id, asignacion.entrenamiento_id)
 		self.assertEqual(nueva_asignacion.ejercicios_elegidos.count(), 2)
 
 		respuesta = self.client.post(
@@ -360,6 +369,11 @@ class AutenticacionYRutinasTests(TestCase):
 				entrenamiento=entrenamiento, ejercicio=ejercicio_nuevo
 			).exists()
 		)
+		self.assertFalse(
+			EntrenamientoEjercicio.objects.filter(
+				entrenamiento=asignacion.entrenamiento, ejercicio=ejercicio_nuevo
+			).exists()
+		)
 
 		respuesta = self.client.post(
 			reverse("panel_admin:entrenamiento_ejercicio_editar", args=[entrenamiento.pk, entrada_nueva.pk]),
@@ -370,6 +384,9 @@ class AutenticacionYRutinasTests(TestCase):
 			respuesta, reverse("panel_admin:entrenamiento_detalle", args=[entrenamiento.pk])
 		)
 		self.assertEqual(entrada_nueva.orden, 3)
+		entrada_plantilla.refresh_from_db()
+		self.assertEqual(entrada_plantilla.orden, 1)
+		self.assertEqual(entrada_personal.orden, 1)
 
 	def test_panel_admin_edita_sesiones_y_series_sin_romper_referencias(self):
 		admin_user = get_user_model().objects.create_superuser(
@@ -561,17 +578,23 @@ class AutenticacionYRutinasTests(TestCase):
 			email="usuario@example.com",
 			password="UnaClaveSegura123!",
 		)
-		entrenamiento = Entrenamiento.objects.create(nombre="Rutina conservada")
-		asignacion = UsuarioEntrenamiento.objects.create(
-			usuario=usuario, entrenamiento=entrenamiento
+		entrenamiento = Entrenamiento.objects.create(
+			nombre="Rutina conservada", es_plantilla=True
 		)
 		ejercicio = Ejercicio.objects.create(nombre="Remo", grupo_muscular="Espalda")
-		entrada = EntrenamientoEjercicio.objects.create(
+		EntrenamientoEjercicio.objects.create(
 			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
 		)
-		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
-			usuario_entrenamiento=asignacion, entrenamiento_ejercicio=entrada
+		self.client.force_login(admin_user)
+		respuesta = self.client.post(
+			reverse("panel_admin:entrenamiento_detalle", args=[entrenamiento.pk]),
+			{"action": "asignar_usuario", "usuario": usuario.pk},
 		)
+		self.assertRedirects(
+			respuesta, reverse("panel_admin:entrenamiento_detalle", args=[entrenamiento.pk])
+		)
+		asignacion = UsuarioEntrenamiento.objects.get(usuario=usuario)
+		seleccion = asignacion.ejercicios_elegidos.get()
 		sesion = SesionEntrenamiento.objects.create(
 			usuario_entrenamiento=asignacion, fecha=timezone.now(), notas="Historial intacto"
 		)
@@ -582,8 +605,6 @@ class AutenticacionYRutinasTests(TestCase):
 			repeticiones=10,
 			peso=Decimal("35.00"),
 		)
-		self.client.force_login(admin_user)
-
 		respuesta = self.client.post(
 			reverse(
 				"panel_admin:entrenamiento_usuario_desasignar",
@@ -613,7 +634,9 @@ class AutenticacionYRutinasTests(TestCase):
 		asignacion.refresh_from_db()
 		self.assertTrue(asignacion.activa)
 		self.assertEqual(
-			UsuarioEntrenamiento.objects.filter(usuario=usuario, entrenamiento=entrenamiento).count(),
+			UsuarioEntrenamiento.objects.filter(
+				usuario=usuario, entrenamiento__plantilla=entrenamiento
+			).count(),
 			1,
 		)
 		self.assertTrue(SesionEntrenamiento.objects.filter(pk=sesion.pk).exists())
@@ -660,6 +683,97 @@ class AutenticacionYRutinasTests(TestCase):
 
 
 class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
+	def test_migracion_crea_copias_personales_y_conserva_las_series(self):
+		migration_anterior = ("tracker", "0006_usuarioentrenamiento_activa")
+		migracion_actual = (
+			"tracker",
+			"0007_entrenamiento_es_plantilla_entrenamiento_plantilla_and_more",
+		)
+		executor = MigrationExecutor(connection)
+		executor.migrate([migration_anterior])
+		apps_anteriores = executor.loader.project_state([migration_anterior]).apps
+		User = get_user_model()
+		usuario_uno = User.objects.create_user(
+			username="migracion-uno", email="migracion-uno@example.com"
+		)
+		usuario_dos = User.objects.create_user(
+			username="migracion-dos", email="migracion-dos@example.com"
+		)
+		EntrenamientoAntiguo = apps_anteriores.get_model("tracker", "Entrenamiento")
+		EjercicioAntiguo = apps_anteriores.get_model("tracker", "Ejercicio")
+		EntradaAntigua = apps_anteriores.get_model("tracker", "EntrenamientoEjercicio")
+		AsignacionAntigua = apps_anteriores.get_model("tracker", "UsuarioEntrenamiento")
+		SeleccionAntigua = apps_anteriores.get_model(
+			"tracker", "UsuarioEntrenamientoEjercicio"
+		)
+		SesionAntigua = apps_anteriores.get_model("tracker", "SesionEntrenamiento")
+		SerieAntigua = apps_anteriores.get_model("tracker", "Serie")
+		rutina = EntrenamientoAntiguo.objects.create(nombre="Plantilla legada")
+		ejercicio = EjercicioAntiguo.objects.create(
+			nombre="Sentadilla migrada", grupo_muscular="Piernas"
+		)
+		entrada = EntradaAntigua.objects.create(
+			entrenamiento=rutina, ejercicio=ejercicio, orden=1
+		)
+		asignaciones = [
+			AsignacionAntigua.objects.create(usuario_id=usuario.pk, entrenamiento=rutina)
+			for usuario in (usuario_uno, usuario_dos)
+		]
+		selecciones = [
+			SeleccionAntigua.objects.create(
+				usuario_entrenamiento=asignacion,
+				entrenamiento_ejercicio=entrada,
+			)
+			for asignacion in asignaciones
+		]
+		sesion = SesionAntigua.objects.create(
+			usuario_entrenamiento=asignaciones[0], fecha=timezone.now()
+		)
+		serie = SerieAntigua.objects.create(
+			sesion_entrenamiento=sesion,
+			usuario_entrenamiento_ejercicio=selecciones[0],
+			numero_serie=1,
+			repeticiones=8,
+			peso=Decimal("70.00"),
+		)
+
+		try:
+			executor = MigrationExecutor(connection)
+			executor.migrate([migracion_actual])
+			apps_actuales = executor.loader.project_state([migracion_actual]).apps
+			EntrenamientoActual = apps_actuales.get_model("tracker", "Entrenamiento")
+			AsignacionActual = apps_actuales.get_model("tracker", "UsuarioEntrenamiento")
+			SeleccionActual = apps_actuales.get_model(
+				"tracker", "UsuarioEntrenamientoEjercicio"
+			)
+			SerieActual = apps_actuales.get_model("tracker", "Serie")
+			plantilla = EntrenamientoActual.objects.get(pk=rutina.pk)
+			asignacion_uno = AsignacionActual.objects.get(pk=asignaciones[0].pk)
+			asignacion_dos = AsignacionActual.objects.get(pk=asignaciones[1].pk)
+			self.assertTrue(plantilla.es_plantilla)
+			self.assertNotEqual(asignacion_uno.entrenamiento_id, rutina.pk)
+			self.assertNotEqual(asignacion_dos.entrenamiento_id, rutina.pk)
+			self.assertNotEqual(
+				asignacion_uno.entrenamiento_id, asignacion_dos.entrenamiento_id
+			)
+			self.assertEqual(
+				asignacion_uno.entrenamiento.plantilla_id,
+				asignacion_dos.entrenamiento.plantilla_id,
+			)
+			self.assertEqual(
+				SerieActual.objects.get(pk=serie.pk)
+				.usuario_entrenamiento_ejercicio_id,
+				SeleccionActual.objects.get(pk=selecciones[0].pk).pk,
+			)
+			self.assertEqual(
+				SeleccionActual.objects.get(pk=selecciones[0].pk)
+				.entrenamiento_ejercicio.entrenamiento_id,
+				asignacion_uno.entrenamiento_id,
+			)
+		finally:
+			executor = MigrationExecutor(connection)
+			executor.migrate(executor.loader.graph.leaf_nodes())
+
 	def test_user_edit_does_not_depend_on_group_join_table(self):
 		admin_user = get_user_model().objects.create_superuser(
 			username="admin",
@@ -784,15 +898,18 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 			email="asignado@example.com",
 			password="UnaClaveSegura123!",
 		)
+		otra_rutina = Entrenamiento.objects.create(nombre="Rutina progresiva")
 		otra_asignacion = UsuarioEntrenamiento.objects.create(
-			usuario=otro_usuario, entrenamiento=asignacion.entrenamiento
+			usuario=otro_usuario, entrenamiento=otra_rutina
 		)
 
 		ejercicio = Ejercicio.objects.create(
 			nombre="Press militar", grupo_muscular="Hombros", activo=True
 		)
 		respuesta = self.client.get(reverse("ejercicios"))
-		self.assertContains(respuesta, "Selecciona un ejercicio para añadirlo a una rutina.")
+		self.assertContains(
+			respuesta, "Despliega un ejercicio para añadirlo a una de tus rutinas personales."
+		)
 		self.assertContains(respuesta, f'value="{asignacion.pk}"')
 
 		respuesta = self.client.post(
@@ -812,13 +929,8 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 				entrenamiento_ejercicio=entrada,
 			).exists()
 		)
-		self.assertTrue(
-			UsuarioEntrenamientoEjercicio.objects.filter(
-				usuario_entrenamiento=otra_asignacion,
-				entrenamiento_ejercicio=entrada,
-			).exists()
-		)
-		self.assertEqual(otra_asignacion.ejercicios_elegidos.count(), 1)
+		self.assertFalse(otra_asignacion.ejercicios_elegidos.exists())
+		self.assertNotEqual(asignacion.entrenamiento_id, otra_asignacion.entrenamiento_id)
 
 		respuesta = self.client.post(
 			reverse("ejercicio_anadir_a_rutina", args=[ejercicio.pk]),
@@ -875,8 +987,12 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 		ejercicio_asignado = Ejercicio.objects.create(
 			nombre="Press banca", grupo_muscular="Pecho"
 		)
-		EntrenamientoEjercicio.objects.create(
+		entrada = EntrenamientoEjercicio.objects.create(
 			entrenamiento=entrenamiento, ejercicio=ejercicio_asignado, orden=1
+		)
+		UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion,
+			entrenamiento_ejercicio=entrada,
 		)
 		ejercicio_no_asignado = Ejercicio.objects.create(
 			nombre="Sentadilla", grupo_muscular="Piernas"
@@ -1171,6 +1287,76 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 		entrenamiento.refresh_from_db()
 		self.assertEqual(entrenamiento.nombre, "Rutina espalda")
 		self.assertEqual(entrenamiento.ejercicios.count(), 1)
+
+	def test_usuario_puede_quitar_ejercicio_sin_borrar_su_historial_ni_afectar_a_otros(self):
+		usuario = get_user_model().objects.create_user(
+			username="rutina-personal@example.com",
+			email="rutina-personal@example.com",
+			password="UnaClaveSegura123!",
+		)
+		otro_usuario = get_user_model().objects.create_user(
+			username="otra-rutina@example.com",
+			email="otra-rutina@example.com",
+			password="UnaClaveSegura123!",
+		)
+		entrenamiento = Entrenamiento.objects.create(nombre="Rutina propia")
+		otra_rutina = Entrenamiento.objects.create(nombre="Rutina de otra persona")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=usuario, entrenamiento=entrenamiento
+		)
+		otra_asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=otro_usuario, entrenamiento=otra_rutina
+		)
+		ejercicio = Ejercicio.objects.create(nombre="Press inclinado", grupo_muscular="Pecho")
+		entrada = EntrenamientoEjercicio.objects.create(
+			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
+		)
+		otra_entrada = EntrenamientoEjercicio.objects.create(
+			entrenamiento=otra_rutina, ejercicio=ejercicio, orden=1
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion, entrenamiento_ejercicio=entrada
+		)
+		otra_seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=otra_asignacion,
+			entrenamiento_ejercicio=otra_entrada,
+		)
+		sesion = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion, fecha=timezone.now()
+		)
+		serie = Serie.objects.create(
+			sesion_entrenamiento=sesion,
+			usuario_entrenamiento_ejercicio=seleccion,
+			numero_serie=1,
+			repeticiones=8,
+			peso=Decimal("65.00"),
+		)
+		self.client.force_login(usuario)
+
+		respuesta = self.client.post(
+			reverse("editar_entrenamiento", args=[asignacion.pk]),
+			{"nombre": "Rutina propia", "descripcion": ""},
+		)
+
+		self.assertRedirects(respuesta, reverse("dashboard"))
+		seleccion.refresh_from_db()
+		self.assertFalse(seleccion.activo)
+		self.assertTrue(Serie.objects.filter(pk=serie.pk).exists())
+		self.assertTrue(otra_seleccion.activo)
+		self.assertTrue(
+			UsuarioEntrenamientoEjercicio.objects.filter(pk=otra_seleccion.pk).exists()
+		)
+		respuesta = self.client.get(reverse("editar_sesion", args=[sesion.pk]))
+		self.assertContains(respuesta, "historial conservado")
+		self.assertNotContains(respuesta, "Editar ejercicio")
+		respuesta = self.client.post(
+			reverse("ejercicio_anadir_a_rutina", args=[ejercicio.pk]),
+			{"asignacion": asignacion.pk},
+		)
+		self.assertRedirects(respuesta, reverse("ejercicios"))
+		seleccion.refresh_from_db()
+		self.assertTrue(seleccion.activo)
+		self.assertTrue(Serie.objects.filter(pk=serie.pk).exists())
 
 	def test_inicio_muestra_estadisticas_y_historial_de_sesiones(self):
 		cuenta = get_user_model().objects.create_user(
