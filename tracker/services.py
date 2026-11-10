@@ -10,20 +10,27 @@ from .models import (
 
 
 @transaction.atomic
-def copiar_plantilla_para_usuario(plantilla, usuario):
-	if not plantilla.es_plantilla:
-		raise ValueError("Solo se pueden asignar plantillas de rutina.")
+def copiar_rutina_para_usuario(rutina, usuario):
+	asignacion_origen = UsuarioEntrenamiento.objects.filter(
+		entrenamiento=rutina
+	).first()
+	ejercicios = rutina.ejercicios.all()
+	if not rutina.es_plantilla and asignacion_origen is not None:
+		ejercicios = ejercicios.filter(
+			elecciones__usuario_entrenamiento=asignacion_origen,
+			elecciones__activo=True,
+		)
 
 	entrenamiento = Entrenamiento.objects.create(
-		nombre=plantilla.nombre,
-		descripcion=plantilla.descripcion,
-		plantilla=plantilla,
+		nombre=rutina.nombre,
+		descripcion=rutina.descripcion,
+		plantilla=rutina,
 	)
 	asignacion = UsuarioEntrenamiento.objects.create(
 		usuario=usuario,
 		entrenamiento=entrenamiento,
 	)
-	for entrada in plantilla.ejercicios.all():
+	for entrada in ejercicios:
 		entrada_personal = EntrenamientoEjercicio.objects.create(
 			entrenamiento=entrenamiento,
 			ejercicio=entrada.ejercicio,
