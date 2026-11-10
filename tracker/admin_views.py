@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.views import redirect_to_login
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Min, Q
+from django.db.models import Count, Q
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -190,10 +190,17 @@ def ejercicio_editar(request, ejercicio_id):
 @staff_required
 def entrenamientos(request):
 	query = request.GET.get("q", "").strip()
-	queryset = Entrenamiento.objects.select_related("plantilla").annotate(
-		usuarios_count=Count("usuarios", distinct=True),
-		copias_count=Count("copias", distinct=True),
-		usuario_nombre=Min("usuarios__usuario__username"),
+	queryset = Entrenamiento.objects.filter(rutina_origen__isnull=True).annotate(
+		asignaciones_count=Count(
+			"usuarios__pk",
+			filter=Q(usuarios__activa=True),
+			distinct=True,
+		),
+		copias_asignaciones_count=Count(
+			"copias__usuarios__pk",
+			filter=Q(copias__usuarios__activa=True),
+			distinct=True,
+		),
 		ejercicios_count=Count("ejercicios", distinct=True),
 	).order_by("nombre")
 	if query:
@@ -211,8 +218,6 @@ def entrenamiento_nuevo(request):
 	form = AdminEntrenamientoForm(request.POST or None)
 	if request.method == "POST" and form.is_valid():
 		entrenamiento = form.save()
-		entrenamiento.es_plantilla = True
-		entrenamiento.save(update_fields=["es_plantilla"])
 		messages.success(request, f"La rutina {entrenamiento.nombre} se creó.")
 		return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
 	return render(
@@ -226,6 +231,11 @@ def entrenamiento_nuevo(request):
 @require_http_methods(["GET", "POST"])
 def entrenamiento_detalle(request, entrenamiento_id):
 	entrenamiento = get_object_or_404(Entrenamiento, pk=entrenamiento_id)
+	if entrenamiento.rutina_origen_id is not None:
+		return redirect(
+			"panel_admin:entrenamiento_detalle",
+			entrenamiento_id=entrenamiento.rutina_origen_id,
+		)
 	action = request.POST.get("action") if request.method == "POST" else None
 	form = AdminEntrenamientoForm(
 		request.POST if action == "guardar_rutina" else None, instance=entrenamiento
@@ -248,8 +258,8 @@ def entrenamiento_detalle(request, entrenamiento_id):
 					usuario=usuario
 				).filter(
 					Q(entrenamiento=entrenamiento)
-					| Q(entrenamiento__plantilla=entrenamiento)
-				).select_related("entrenamiento").first()
+					| Q(entrenamiento__rutina_origen=entrenamiento)
+				).select_related("entrenamiento").order_by("-activa").first()
 				creada = asignacion is None
 				if creada:
 					asignacion = copiar_rutina_para_usuario(entrenamiento, usuario)
@@ -275,26 +285,25 @@ def entrenamiento_detalle(request, entrenamiento_id):
 				entrada = ejercicio_form.save(commit=False)
 				entrada.entrenamiento = entrenamiento
 				entrada.save()
-				if not entrenamiento.es_plantilla:
-					for asignacion in UsuarioEntrenamiento.objects.filter(
-						entrenamiento=entrenamiento
-					):
-						UsuarioEntrenamientoEjercicio.objects.create(
-							usuario_entrenamiento=asignacion,
-							entrenamiento_ejercicio=entrada,
-						)
+				for asignacion in UsuarioEntrenamiento.objects.filter(
+					entrenamiento=entrenamiento, activa=True
+				):
+					UsuarioEntrenamientoEjercicio.objects.create(
+						usuario_entrenamiento=asignacion,
+						entrenamiento_ejercicio=entrada,
+					)
 		except IntegrityError:
 			messages.error(request, "No se pudo añadir: comprueba que el ejercicio y el orden no estén repetidos.")
 		else:
 			messages.success(
 				request,
-				"Ejercicio añadido a la rutina."
-				if entrenamiento.es_plantilla
-				else "Ejercicio añadido a la rutina personal.",
+				"Ejercicio añadido a la rutina.",
 			)
 			return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
 	asignaciones = UsuarioEntrenamiento.objects.filter(
-		Q(entrenamiento=entrenamiento) | Q(entrenamiento__plantilla=entrenamiento)
+		Q(entrenamiento=entrenamiento)
+		| Q(entrenamiento__rutina_origen=entrenamiento),
+		activa=True,
 	)
 	return render(
 		request,
@@ -312,7 +321,6 @@ def entrenamiento_detalle(request, entrenamiento_id):
 			.select_related("ejercicio")
 			.annotate(selecciones_activas=Count("elecciones", filter=Q(elecciones__activo=True)))
 			.prefetch_related("elecciones__series"),
-			"es_plantilla": entrenamiento.es_plantilla,
 		},
 	)
 
@@ -323,7 +331,7 @@ def entrenamiento_usuario_desasignar(request, entrenamiento_id, asignacion_id):
 	asignacion = get_object_or_404(
 		UsuarioEntrenamiento.objects.select_related("usuario", "entrenamiento"),
 		Q(entrenamiento_id=entrenamiento_id)
-		| Q(entrenamiento__plantilla_id=entrenamiento_id),
+		| Q(entrenamiento__rutina_origen_id=entrenamiento_id),
 		pk=asignacion_id,
 	)
 	if asignacion.activa:
@@ -406,20 +414,21 @@ def sesiones(request):
 		queryset = queryset.filter(usuario_entrenamiento__usuario_id=int(usuario_id))
 	if rutina_id.isdigit():
 		entrenamiento = Entrenamiento.objects.filter(pk=int(rutina_id)).first()
-		if entrenamiento is not None and entrenamiento.es_plantilla:
+		if entrenamiento is not None:
+			rutina_origen = entrenamiento.rutina_origen or entrenamiento
 			queryset = queryset.filter(
-				Q(usuario_entrenamiento__entrenamiento_id=entrenamiento.pk)
-				| Q(usuario_entrenamiento__entrenamiento__plantilla=entrenamiento)
+				Q(usuario_entrenamiento__entrenamiento_id=rutina_origen.pk)
+				| Q(usuario_entrenamiento__entrenamiento__rutina_origen=rutina_origen)
 			)
-		else:
-			queryset = queryset.filter(usuario_entrenamiento__entrenamiento_id=int(rutina_id))
 	return render(
 		request,
 		"tracker/admin/sesiones.html",
 		{
 			"page_obj": Paginator(queryset, 30).get_page(request.GET.get("page")),
 			"usuarios": get_user_model().objects.order_by("username"),
-			"entrenamientos": Entrenamiento.objects.order_by("nombre"),
+			"entrenamientos": Entrenamiento.objects.filter(
+				rutina_origen__isnull=True
+			).order_by("nombre"),
 			"usuario_id": usuario_id,
 			"rutina_id": rutina_id,
 		},

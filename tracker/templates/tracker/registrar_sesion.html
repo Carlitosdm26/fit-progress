@@ -31,7 +31,7 @@
                 {% endfor %}
             </div>
             <div class="actions">
-                {% if guardado.editable %}<a class="button secondary" href="{% url 'editar_sesion' sesion.id %}?ejercicio={{ guardado.seleccion.id }}">Editar ejercicio</a>{% else %}<span class="muted">Ejercicio retirado de la rutina; historial conservado.</span>{% endif %}
+                {% if guardado.editable %}<a class="button secondary" href="{% url 'editar_sesion' sesion.id %}?ejercicio={{ guardado.seleccion.id }}#exercise-form">Editar ejercicio</a>{% else %}<span class="muted">Ejercicio retirado de la rutina; historial conservado.</span>{% endif %}
                 <form method="post" action="{% url 'eliminar_ejercicio_sesion' sesion.id guardado.seleccion.id %}" onsubmit="return confirm('¿Eliminar este ejercicio de la sesión?');">{% csrf_token %}<button class="button danger" type="submit">Eliminar ejercicio</button></form>
             </div>
         </li>
@@ -41,8 +41,8 @@
 {% endif %}
 
 {% if puede_anadir or editando_ejercicio %}
-<section class="panel">
-    <h2>{% if editando %}Añadir o editar ejercicio{% else %}Primer ejercicio{% endif %}</h2>
+<section class="panel" id="exercise-form">
+    <h2>{% if editando_ejercicio %}Editar ejercicio{% elif editando %}Añadir ejercicio{% else %}Primer ejercicio{% endif %}</h2>
     <form method="post">
         {% csrf_token %}
         {% if editando_ejercicio %}<input type="hidden" name="editar_ejercicio" value="{{ editando_ejercicio }}">{% endif %}
@@ -60,7 +60,7 @@
             {% endfor %}
         </div>
         <label for="{{ form.notas.id_for_label }}">{{ form.notas.label }}</label>{{ form.notas }}{{ form.notas.errors }}
-        <div class="actions"><button class="button" type="submit">Guardar ejercicio</button><a class="button secondary" href="{% url 'dashboard' %}">Salir</a></div>
+        <div class="actions"><button class="button" type="submit">{% if editando_ejercicio %}Guardar cambios{% else %}Guardar ejercicio{% endif %}</button>{% if editando_ejercicio %}<a class="button secondary" href="{% url 'editar_sesion' sesion.id %}">Cancelar edición</a>{% else %}<a class="button secondary" href="{% url 'dashboard' %}">Salir</a>{% endif %}</div>
     </form>
 </section>
 {% elif not editando_ejercicio %}

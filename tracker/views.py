@@ -460,7 +460,11 @@ def eliminar_entrenamiento(request, asignacion_id):
 	with transaction.atomic():
 		SesionEntrenamiento.objects.filter(usuario_entrenamiento=asignacion).delete()
 		asignacion.delete()
-		if not entrenamiento.es_plantilla and not entrenamiento.usuarios.exists():
+		if (
+			not entrenamiento.rutina_origen_id
+			and not entrenamiento.usuarios.exists()
+			and not entrenamiento.copias.exists()
+		):
 			entrenamiento.delete()
 	messages.success(request, "Rutina eliminada correctamente.")
 	return redirect("dashboard")
