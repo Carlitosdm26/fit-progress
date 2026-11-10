@@ -569,6 +569,73 @@ class AutenticacionYRutinasTests(TestCase):
 		rutina.refresh_from_db()
 		self.assertEqual(rutina.copias.filter(usuarios__activa=True).count(), 0)
 
+	def test_panel_admin_elimina_rutina_y_historial_conservando_copias(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="test-password",
+		)
+		usuario_origen = get_user_model().objects.create_user(
+			username="origen",
+			email="origen@example.com",
+			password="test-password",
+		)
+		usuario_copia = get_user_model().objects.create_user(
+			username="copia",
+			email="copia@example.com",
+			password="test-password",
+		)
+		rutina = Entrenamiento.objects.create(nombre="Fuerza")
+		ejercicio = Ejercicio.objects.create(nombre="Press", grupo_muscular="Pecho")
+		entrada = EntrenamientoEjercicio.objects.create(
+			entrenamiento=rutina, ejercicio=ejercicio, orden=1
+		)
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=usuario_origen, entrenamiento=rutina
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion,
+			entrenamiento_ejercicio=entrada,
+		)
+		sesion = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion, fecha=timezone.now()
+		)
+		serie = Serie.objects.create(
+			sesion_entrenamiento=sesion,
+			usuario_entrenamiento_ejercicio=seleccion,
+			numero_serie=1,
+			repeticiones=8,
+			peso=Decimal("50.00"),
+		)
+		rutina_copia = Entrenamiento.objects.create(
+			nombre=rutina.nombre, rutina_origen=rutina
+		)
+		UsuarioEntrenamiento.objects.create(
+			usuario=usuario_copia, entrenamiento=rutina_copia
+		)
+		self.client.force_login(admin_user)
+
+		respuesta = self.client.get(reverse("panel_admin:entrenamientos"))
+		self.assertContains(
+			respuesta,
+			reverse("panel_admin:entrenamiento_eliminar", args=[rutina.pk]),
+		)
+		respuesta = self.client.post(
+			reverse("panel_admin:entrenamiento_eliminar", args=[rutina.pk])
+		)
+
+		self.assertRedirects(respuesta, reverse("panel_admin:entrenamientos"))
+		self.assertFalse(Entrenamiento.objects.filter(pk=rutina.pk).exists())
+		self.assertFalse(SesionEntrenamiento.objects.filter(pk=sesion.pk).exists())
+		self.assertFalse(Serie.objects.filter(pk=serie.pk).exists())
+		rutina_copia.refresh_from_db()
+		self.assertIsNone(rutina_copia.rutina_origen_id)
+		self.assertTrue(
+			UsuarioEntrenamiento.objects.filter(
+				usuario=usuario_copia, entrenamiento=rutina_copia
+			).exists()
+		)
+
 	def test_panel_admin_edita_sesiones_y_series_sin_romper_referencias(self):
 		admin_user = get_user_model().objects.create_superuser(
 			username="admin",

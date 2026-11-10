@@ -6,6 +6,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Min, Q
+from django.db.models.deletion import ProtectedError
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -219,6 +220,43 @@ def entrenamiento_nuevo(request):
 		"tracker/admin/entidad_form.html",
 		{"form": form, "titulo": "Nueva rutina", "volver": reverse("panel_admin:entrenamientos")},
 	)
+
+
+@staff_required
+@require_http_methods(["POST"])
+def entrenamiento_eliminar(request, entrenamiento_id):
+	entrenamiento = get_object_or_404(Entrenamiento, pk=entrenamiento_id)
+	try:
+		with transaction.atomic():
+			Entrenamiento.objects.filter(rutina_origen=entrenamiento).update(
+				rutina_origen_id=entrenamiento.rutina_origen_id
+			)
+			for asignacion in UsuarioEntrenamiento.objects.filter(
+				entrenamiento=entrenamiento
+			):
+				SesionEntrenamiento.objects.filter(
+					usuario_entrenamiento=asignacion
+				).delete()
+				UsuarioEntrenamientoEjercicio.objects.filter(
+					usuario_entrenamiento=asignacion
+				).delete()
+				asignacion.delete()
+			EntrenamientoEjercicio.objects.filter(entrenamiento=entrenamiento).delete()
+			nombre = entrenamiento.nombre
+			entrenamiento.delete()
+	except ProtectedError:
+		messages.error(
+			request,
+			"No se pudo eliminar la rutina porque algunos de sus ejercicios "
+			"siguen vinculados a registros de otras rutinas.",
+		)
+	else:
+		messages.success(
+			request,
+			f"Se eliminó la rutina {nombre} junto con sus sesiones e historial. "
+			"Las copias de otros usuarios se conservaron.",
+		)
+	return redirect("panel_admin:entrenamientos")
 
 
 @staff_required
