@@ -90,16 +90,41 @@
 <script>
     const numeroSeries = document.getElementById("{{ form.numero_series.id_for_label }}");
     const seriesContainer = document.getElementById("series-container");
+    const seriesValues = new Map(
+        Array.from(seriesContainer.querySelectorAll("input"), (input) => [input.name, input.value])
+    );
 
     numeroSeries.addEventListener("change", () => {
+        seriesContainer.querySelectorAll("input").forEach((input) => {
+            seriesValues.set(input.name, input.value);
+        });
         const count = Math.max(0, Math.min(20, Number.parseInt(numeroSeries.value || "0", 10)));
         seriesContainer.innerHTML = "";
         for (let number = 1; number <= count; number += 1) {
-            seriesContainer.insertAdjacentHTML("beforeend", `
-                <div class="set-row">
-                    <div><label for="reps_${number}">Serie ${number} - repeticiones</label><input id="reps_${number}" name="reps_${number}" type="number" min="1" required></div>
-                    <div><label for="peso_${number}">Peso (kg)</label><input id="peso_${number}" name="peso_${number}" type="number" min="0" step="0.01" required></div>
-                </div>`);
+            const row = document.createElement("div");
+            row.className = "set-row";
+            [
+                { name: `reps_${number}`, label: `Serie ${number} - repeticiones`, min: "1" },
+                { name: `peso_${number}`, label: "Peso (kg)", min: "0", step: "0.01" },
+            ].forEach(({ name, label, min, step }) => {
+                const field = document.createElement("div");
+                const fieldLabel = document.createElement("label");
+                const input = document.createElement("input");
+                fieldLabel.htmlFor = name;
+                fieldLabel.textContent = label;
+                input.id = name;
+                input.name = name;
+                input.type = "number";
+                input.min = min;
+                input.required = true;
+                if (step) {
+                    input.step = step;
+                }
+                input.value = seriesValues.get(name) || "";
+                field.append(fieldLabel, input);
+                row.append(field);
+            });
+            seriesContainer.append(row);
         }
     });
 </script>

@@ -570,6 +570,8 @@ class EjercicioSesionForm(forms.Form):
 		if selected_id:
 			self.fields["ejercicio"].queryset = selecciones.filter(pk=selected_id)
 			self.fields["ejercicio"].initial = selected_id
+		if sesion is not None:
+			self.fields["notas"].initial = sesion.notas
 		existing_series = []
 		if sesion is not None and selected_id:
 			existing_series = list(
@@ -580,6 +582,7 @@ class EjercicioSesionForm(forms.Form):
 			count_value = min(max(int(count_value or 0), 0), 20)
 		except (TypeError, ValueError):
 			count_value = 0
+		self.fields["numero_series"].initial = count_value
 		self.series_fields = []
 		for numero_serie in range(1, count_value + 1):
 			reps_name = f"reps_{numero_serie}"

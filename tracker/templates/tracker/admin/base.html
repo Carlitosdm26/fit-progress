@@ -117,7 +117,7 @@
         <div class="rail-foot">Panel de gestión<br>Acceso restringido</div>
     </aside>
     <div class="shell">
-        <header class="topline"><span class="crumb">Fit Progress / Administración</span><div class="top-actions"><a class="button secondary app-link" href="{% url 'inicio' %}">Volver a la app</a><div class="top-user"><span>{{ request.user.username }}</span><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="logout" type="submit">Salir</button></form></div><button class="menu-toggle" type="button" aria-label="Abrir menú de administración" aria-expanded="false" aria-controls="admin-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"></path></svg></button></div></header>
+        <header class="topline"><span class="crumb">Fit Progress / Administración</span><div class="top-actions"><a class="button secondary app-link" href="{% url 'inicio' %}">Volver al área cliente</a><div class="top-user"><span>{{ request.user.username }}</span><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="logout" type="submit">Salir</button></form></div><button class="menu-toggle" type="button" aria-label="Abrir menú de administración" aria-expanded="false" aria-controls="admin-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"></path></svg></button></div></header>
         <main class="content">
             {% for message in messages %}<div class="message" role="status">{{ message }}</div>{% endfor %}
             {% block content %}{% endblock %}
