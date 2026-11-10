@@ -11,11 +11,13 @@ from .models import (
 
 @transaction.atomic
 def copiar_rutina_para_usuario(rutina, usuario):
+	rutina_origen = rutina.rutina_origen or rutina
 	asignacion_origen = UsuarioEntrenamiento.objects.filter(
-		entrenamiento=rutina
+		entrenamiento=rutina,
+		activa=True,
 	).first()
 	ejercicios = rutina.ejercicios.all()
-	if not rutina.es_plantilla and asignacion_origen is not None:
+	if asignacion_origen is not None:
 		ejercicios = ejercicios.filter(
 			elecciones__usuario_entrenamiento=asignacion_origen,
 			elecciones__activo=True,
@@ -24,7 +26,7 @@ def copiar_rutina_para_usuario(rutina, usuario):
 	entrenamiento = Entrenamiento.objects.create(
 		nombre=rutina.nombre,
 		descripcion=rutina.descripcion,
-		plantilla=rutina,
+		rutina_origen=rutina_origen,
 	)
 	asignacion = UsuarioEntrenamiento.objects.create(
 		usuario=usuario,

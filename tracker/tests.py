@@ -185,6 +185,8 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertContains(respuesta, "Abrir menú de cliente")
 		self.assertContains(respuesta, 'aria-controls="client-navigation"')
 		self.assertContains(respuesta, "Área cliente")
+		self.assertContains(respuesta, ">Sesiones</a>")
+		self.assertNotContains(respuesta, ">Historial</a>")
 		self.assertNotContains(respuesta, 'class="admin-nav-link"')
 		self.assertContains(respuesta, ".nav-links.is-open { display: flex; }")
 		self.assertContains(
@@ -304,9 +306,7 @@ class AutenticacionYRutinasTests(TestCase):
 			email="runner@example.com",
 			password="UnaClaveSegura123!",
 		)
-		entrenamiento = Entrenamiento.objects.create(
-			nombre="Fuerza A", es_plantilla=True
-		)
+		entrenamiento = Entrenamiento.objects.create(nombre="Fuerza A")
 		ejercicio = Ejercicio.objects.create(nombre="Sentadilla", grupo_muscular="Piernas")
 		entrada_plantilla = EntrenamientoEjercicio.objects.create(
 			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
@@ -331,7 +331,7 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertEqual(respuesta.status_code, 302)
 		asignacion = UsuarioEntrenamiento.objects.get(usuario=usuario)
 		self.assertNotEqual(asignacion.entrenamiento_id, entrenamiento.pk)
-		self.assertEqual(asignacion.entrenamiento.plantilla_id, entrenamiento.pk)
+		self.assertEqual(asignacion.entrenamiento.rutina_origen_id, entrenamiento.pk)
 		entrada_personal = asignacion.entrenamiento.ejercicios.get()
 		self.assertEqual(entrada_personal.ejercicio, ejercicio)
 
@@ -375,7 +375,7 @@ class AutenticacionYRutinasTests(TestCase):
 		)
 		self.assertEqual(respuesta.status_code, 302)
 		nueva_asignacion = UsuarioEntrenamiento.objects.get(usuario=nuevo_usuario)
-		self.assertEqual(nueva_asignacion.entrenamiento.plantilla_id, entrenamiento.pk)
+		self.assertEqual(nueva_asignacion.entrenamiento.rutina_origen_id, entrenamiento.pk)
 		self.assertNotEqual(nueva_asignacion.entrenamiento_id, asignacion.entrenamiento_id)
 		self.assertEqual(nueva_asignacion.ejercicios_elegidos.count(), 2)
 
@@ -448,7 +448,8 @@ class AutenticacionYRutinasTests(TestCase):
 		respuesta = self.client.get(reverse("panel_admin:entrenamientos"))
 		self.assertContains(respuesta, "Rutinas")
 		self.assertContains(respuesta, "Tren Superior")
-		self.assertContains(respuesta, "origen")
+		self.assertContains(respuesta, "1 asignación")
+		self.assertEqual(respuesta.context["page_obj"].paginator.count, 1)
 
 		respuesta = self.client.post(
 			reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk]),
@@ -457,10 +458,93 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertRedirects(
 			respuesta, reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk])
 		)
+		respuesta = self.client.get(
+			reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk])
+		)
+		self.assertContains(respuesta, "2 activos")
+		self.assertContains(respuesta, "origen")
+		self.assertContains(respuesta, "destino")
 		asignacion_destino = UsuarioEntrenamiento.objects.get(usuario=usuario_destino)
 		self.assertNotEqual(asignacion_destino.entrenamiento_id, rutina.pk)
-		self.assertEqual(asignacion_destino.entrenamiento.plantilla_id, rutina.pk)
+		self.assertEqual(asignacion_destino.entrenamiento.rutina_origen_id, rutina.pk)
 		self.assertEqual(asignacion_destino.entrenamiento.ejercicios.get().ejercicio, ejercicio)
+		respuesta = self.client.get(reverse("panel_admin:entrenamientos"))
+		self.assertContains(respuesta, "2 asignaciones")
+		self.assertEqual(respuesta.context["page_obj"].paginator.count, 1)
+		respuesta = self.client.get(
+			reverse("panel_admin:entrenamiento_detalle", args=[asignacion_destino.entrenamiento_id])
+		)
+		self.assertRedirects(
+			respuesta, reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk])
+		)
+
+	def test_panel_admin_solo_muestra_y_cuenta_asignaciones_activas(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="test-password-123",
+		)
+		usuarios = [
+			get_user_model().objects.create_user(
+				username=nombre,
+				email=f"{nombre}@example.com",
+				password="test-password-123",
+			)
+			for nombre in ("activo", "desasignado")
+		]
+		rutina = Entrenamiento.objects.create(nombre="Full body")
+		asignaciones = []
+		for usuario in usuarios:
+			copia = Entrenamiento.objects.create(
+				nombre=rutina.nombre,
+				rutina_origen=rutina,
+			)
+			asignaciones.append(
+				UsuarioEntrenamiento.objects.create(
+					usuario=usuario,
+					entrenamiento=copia,
+					activa=usuario.username == "activo",
+				)
+			)
+		self.client.force_login(admin_user)
+
+		respuesta = self.client.get(reverse("panel_admin:entrenamientos"))
+		rutina_en_lista = next(
+			item for item in respuesta.context["page_obj"] if item.pk == rutina.pk
+		)
+		self.assertEqual(rutina_en_lista.asignaciones_count, 0)
+		self.assertEqual(rutina_en_lista.copias_asignaciones_count, 1)
+
+		respuesta = self.client.get(
+			reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk])
+		)
+		usuario_activo_url = reverse(
+			"panel_admin:usuario_detalle", args=[usuarios[0].pk]
+		)
+		usuario_inactivo_url = reverse(
+			"panel_admin:usuario_detalle", args=[usuarios[1].pk]
+		)
+		self.assertContains(respuesta, f'href="{usuario_activo_url}">activo</a>')
+		self.assertNotContains(respuesta, f'href="{usuario_inactivo_url}">desasignado</a>')
+		self.assertNotContains(respuesta, "Desasignada")
+		self.assertContains(respuesta, "1 activo")
+
+		respuesta = self.client.post(
+			reverse(
+				"panel_admin:entrenamiento_usuario_desasignar",
+				args=[rutina.pk, asignaciones[0].pk],
+			)
+		)
+		self.assertRedirects(
+			respuesta, reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk])
+		)
+		respuesta = self.client.get(
+			reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk])
+		)
+		self.assertNotContains(respuesta, f'href="{usuario_activo_url}">activo</a>')
+		self.assertNotContains(respuesta, f'href="{usuario_inactivo_url}">desasignado</a>')
+		rutina.refresh_from_db()
+		self.assertEqual(rutina.copias.filter(usuarios__activa=True).count(), 0)
 
 	def test_panel_admin_edita_sesiones_y_series_sin_romper_referencias(self):
 		admin_user = get_user_model().objects.create_superuser(
@@ -653,9 +737,7 @@ class AutenticacionYRutinasTests(TestCase):
 			email="usuario@example.com",
 			password="UnaClaveSegura123!",
 		)
-		entrenamiento = Entrenamiento.objects.create(
-			nombre="Rutina conservada", es_plantilla=True
-		)
+		entrenamiento = Entrenamiento.objects.create(nombre="Rutina conservada")
 		ejercicio = Ejercicio.objects.create(nombre="Remo", grupo_muscular="Espalda")
 		EntrenamientoEjercicio.objects.create(
 			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
@@ -710,7 +792,7 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertTrue(asignacion.activa)
 		self.assertEqual(
 			UsuarioEntrenamiento.objects.filter(
-				usuario=usuario, entrenamiento__plantilla=entrenamiento
+				usuario=usuario, entrenamiento__rutina_origen=entrenamiento
 			).count(),
 			1,
 		)
@@ -1568,6 +1650,10 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 
 		self.assertEqual(respuesta.status_code, 200)
 		form = respuesta.context["form"]
+		self.assertContains(respuesta, '<h2>Editar ejercicio</h2>')
+		self.assertContains(respuesta, 'id="exercise-form"')
+		self.assertContains(respuesta, f"?ejercicio={seleccion.pk}#exercise-form")
+		self.assertNotContains(respuesta, "Añadir o editar ejercicio")
 		self.assertEqual(form["numero_series"].value(), 3)
 		self.assertEqual(form["notas"].value(), "Controlar el tempo")
 		for numero, (repeticiones, peso) in enumerate(series_guardadas, start=1):
