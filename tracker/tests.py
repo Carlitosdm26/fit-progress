@@ -569,6 +569,132 @@ class AutenticacionYRutinasTests(TestCase):
 		rutina.refresh_from_db()
 		self.assertEqual(rutina.copias.filter(usuarios__activa=True).count(), 0)
 
+	def test_panel_admin_elimina_rutina_conservando_sesiones_e_historial(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="test-password",
+		)
+		usuario_origen = get_user_model().objects.create_user(
+			username="origen",
+			email="origen@example.com",
+			password="test-password",
+		)
+		usuario_copia = get_user_model().objects.create_user(
+			username="copia",
+			email="copia@example.com",
+			password="test-password",
+		)
+		rutina = Entrenamiento.objects.create(nombre="Fuerza")
+		ejercicio = Ejercicio.objects.create(nombre="Press", grupo_muscular="Pecho")
+		entrada = EntrenamientoEjercicio.objects.create(
+			entrenamiento=rutina, ejercicio=ejercicio, orden=1
+		)
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=usuario_origen, entrenamiento=rutina
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion,
+			entrenamiento_ejercicio=entrada,
+		)
+		sesion = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion, fecha=timezone.now()
+		)
+		serie = Serie.objects.create(
+			sesion_entrenamiento=sesion,
+			usuario_entrenamiento_ejercicio=seleccion,
+			numero_serie=1,
+			repeticiones=8,
+			peso=Decimal("50.00"),
+		)
+		rutina_copia = Entrenamiento.objects.create(
+			nombre=rutina.nombre, rutina_origen=rutina
+		)
+		UsuarioEntrenamiento.objects.create(
+			usuario=usuario_copia, entrenamiento=rutina_copia
+		)
+		self.client.force_login(admin_user)
+
+		respuesta = self.client.get(reverse("panel_admin:entrenamientos"))
+		self.assertContains(
+			respuesta,
+			reverse("panel_admin:entrenamiento_eliminar", args=[rutina.pk]),
+		)
+		respuesta = self.client.post(
+			reverse("panel_admin:entrenamiento_eliminar", args=[rutina.pk])
+		)
+
+		self.assertRedirects(respuesta, reverse("panel_admin:entrenamientos"))
+		rutina.refresh_from_db()
+		asignacion.refresh_from_db()
+		self.assertTrue(rutina.eliminada)
+		self.assertFalse(asignacion.activa)
+		self.assertTrue(SesionEntrenamiento.objects.filter(pk=sesion.pk).exists())
+		self.assertTrue(Serie.objects.filter(pk=serie.pk).exists())
+		rutina_copia.refresh_from_db()
+		self.assertEqual(rutina_copia.rutina_origen_id, rutina.pk)
+		self.assertTrue(
+			UsuarioEntrenamiento.objects.filter(
+				usuario=usuario_copia, entrenamiento=rutina_copia
+			).exists()
+		)
+		respuesta = self.client.get(reverse("panel_admin:entrenamientos"))
+		self.assertNotIn(
+			rutina.pk,
+			[item.pk for item in respuesta.context["page_obj"]],
+		)
+		respuesta = self.client.get(reverse("panel_admin:sesiones"))
+		self.assertContains(respuesta, "Fuerza")
+
+	def test_usuario_elimina_rutina_sin_borrar_sesiones(self):
+		usuario = get_user_model().objects.create_user(
+			username="cliente",
+			email="cliente@example.com",
+			password="test-password",
+		)
+		rutina = Entrenamiento.objects.create(nombre="Rutina cliente")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=usuario, entrenamiento=rutina
+		)
+		ejercicio = Ejercicio.objects.create(nombre="Press", grupo_muscular="Pecho")
+		entrada = EntrenamientoEjercicio.objects.create(
+			entrenamiento=rutina, ejercicio=ejercicio, orden=1
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion,
+			entrenamiento_ejercicio=entrada,
+		)
+		sesion = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion, fecha=timezone.now()
+		)
+		serie = Serie.objects.create(
+			sesion_entrenamiento=sesion,
+			usuario_entrenamiento_ejercicio=seleccion,
+			numero_serie=1,
+			repeticiones=8,
+			peso=Decimal("50.00"),
+		)
+		self.client.force_login(usuario)
+
+		respuesta = self.client.post(
+			reverse("eliminar_entrenamiento", args=[asignacion.pk])
+		)
+
+		self.assertRedirects(respuesta, reverse("dashboard"))
+		rutina.refresh_from_db()
+		asignacion.refresh_from_db()
+		self.assertTrue(rutina.eliminada)
+		self.assertFalse(asignacion.activa)
+		self.assertTrue(SesionEntrenamiento.objects.filter(pk=sesion.pk).exists())
+		self.assertTrue(Serie.objects.filter(pk=serie.pk).exists())
+		respuesta = self.client.get(reverse("historial_sesiones"))
+		self.assertContains(respuesta, "Rutina cliente")
+		respuesta = self.client.get(reverse("dashboard"))
+		self.assertNotIn(
+			asignacion.pk,
+			[item.pk for item in respuesta.context["asignaciones"]],
+		)
+
 	def test_panel_admin_edita_sesiones_y_series_sin_romper_referencias(self):
 		admin_user = get_user_model().objects.create_superuser(
 			username="admin",

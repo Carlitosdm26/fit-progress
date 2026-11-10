@@ -124,7 +124,7 @@ def dashboard(request):
 		return render(request, "tracker/sin_perfil.html")
 	asignaciones = UsuarioEntrenamiento.objects.select_related(
 		"entrenamiento"
-	).filter(usuario=perfil, activa=True)
+	).filter(usuario=perfil, activa=True, entrenamiento__eliminada=False)
 	sesiones_qs = SesionEntrenamiento.objects.select_related(
 		"usuario_entrenamiento__entrenamiento"
 	).filter(usuario_entrenamiento__usuario=perfil).prefetch_related("series")
@@ -458,15 +458,15 @@ def eliminar_entrenamiento(request, asignacion_id):
 		return redirect("dashboard")
 	entrenamiento = asignacion.entrenamiento
 	with transaction.atomic():
-		SesionEntrenamiento.objects.filter(usuario_entrenamiento=asignacion).delete()
-		asignacion.delete()
-		if (
-			not entrenamiento.rutina_origen_id
-			and not entrenamiento.usuarios.exists()
-			and not entrenamiento.copias.exists()
-		):
-			entrenamiento.delete()
-	messages.success(request, "Rutina eliminada correctamente.")
+		entrenamiento.eliminada = True
+		entrenamiento.save(update_fields=["eliminada"])
+		UsuarioEntrenamiento.objects.filter(entrenamiento=entrenamiento).update(
+			activa=False
+		)
+	messages.success(
+		request,
+		"La rutina se eliminó de tus rutinas. Tus sesiones e historial se conservaron.",
+	)
 	return redirect("dashboard")
 
 

@@ -12,7 +12,7 @@
     <section class="form-section">
         <div class="section-head"><h2>Rutinas</h2><span class="metric-label">{{ rutinas_usuario|length }} vínculos</span></div>
         {% for asignacion in rutinas_usuario %}
-        <div class="relation-line"><div><a class="row-link" href="{% url 'panel_admin:entrenamiento_detalle' asignacion.entrenamiento_id %}">{{ asignacion.entrenamiento.nombre }}</a><div class="help"><span class="status {% if asignacion.activa %}active{% endif %}">{% if asignacion.activa %}Asignada{% else %}Desasignada{% endif %}</span> · {{ asignacion.sesiones_count }} sesiones</div></div><a class="row-link" href="{% url 'panel_admin:sesiones' %}?usuario={{ usuario.pk }}&rutina={{ asignacion.entrenamiento_id }}">Ver sesiones</a></div>
+        <div class="relation-line"><div><a class="row-link" href="{% url 'panel_admin:entrenamiento_detalle' asignacion.entrenamiento_id %}">{{ asignacion.entrenamiento.nombre }}</a><div class="help"><span class="status {% if asignacion.activa %}active{% endif %}">{% if asignacion.entrenamiento.eliminada %}Eliminada{% elif asignacion.activa %}Asignada{% else %}Desasignada{% endif %}</span> · {{ asignacion.sesiones_count }} sesiones</div></div><a class="row-link" href="{% url 'panel_admin:sesiones' %}?usuario={{ usuario.pk }}&rutina={{ asignacion.entrenamiento_id }}">Ver sesiones</a></div>
         {% empty %}<p class="empty">Este usuario todavía no tiene rutinas.</p>{% endfor %}
     </section>
 </section>

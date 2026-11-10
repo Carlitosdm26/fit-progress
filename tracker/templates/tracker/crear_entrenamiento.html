@@ -31,7 +31,7 @@
     <p class="muted">{{ form.ejercicios.help_text }}</p>
     <div class="actions"><button class="button" type="submit">{% if editando %}Guardar cambios{% else %}Crear entrenamiento{% endif %}</button><a class="button secondary" href="{% url 'dashboard' %}">Cancelar</a></div>
 </form>
-    {% if editando %}<form method="post" action="{% url 'eliminar_entrenamiento' asignacion.id %}" onsubmit="return confirm('¿Eliminar esta rutina y sus sesiones?');">{% csrf_token %}<button class="button danger" type="submit">Eliminar rutina</button></form>{% endif %}
+    {% if editando %}<form method="post" action="{% url 'eliminar_entrenamiento' asignacion.id %}" onsubmit="return confirm('¿Eliminar esta rutina de tus rutinas? Las sesiones y el historial registrados se conservarán.');">{% csrf_token %}<button class="button danger" type="submit">Eliminar rutina</button></form>{% endif %}
 <script>
     const grupoMuscular = document.getElementById("grupo-muscular");
     const opcionesEjercicio = document.querySelectorAll(".exercise-option");

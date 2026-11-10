@@ -342,7 +342,13 @@ class AdminSesionForm(forms.ModelForm):
 		if self.instance.pk:
 			self.fields["usuario_entrenamiento"].disabled = True
 			self.fields["usuario_entrenamiento"].help_text = "La cuenta y rutina de una sesión existente no se pueden cambiar."
-		queryset = UsuarioEntrenamiento.objects.select_related("usuario", "entrenamiento")
+		queryset = UsuarioEntrenamiento.objects.select_related(
+			"usuario", "entrenamiento"
+		).filter(activa=True, entrenamiento__eliminada=False)
+		if self.instance.pk:
+			queryset |= UsuarioEntrenamiento.objects.filter(
+				pk=self.instance.usuario_entrenamiento_id
+			).select_related("usuario", "entrenamiento")
 		if usuario is not None:
 			queryset = queryset.filter(usuario=usuario)
 		self.fields["usuario_entrenamiento"].queryset = queryset.order_by(
