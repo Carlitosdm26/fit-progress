@@ -194,6 +194,8 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertContains(respuesta, "Abrir menú de cliente")
 		self.assertContains(respuesta, 'aria-controls="client-navigation"')
 		self.assertContains(respuesta, "Área cliente")
+		self.assertContains(respuesta, 'href="/inicio/#rutinas"')
+		self.assertContains(respuesta, 'id="rutinas"')
 		self.assertContains(respuesta, ">Sesiones</a>")
 		self.assertNotContains(respuesta, ">Historial</a>")
 		self.assertNotContains(respuesta, 'class="admin-nav-link"')
