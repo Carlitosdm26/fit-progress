@@ -6,7 +6,6 @@ from django.contrib.auth.views import redirect_to_login
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Min, Q
-from django.db.models.deletion import ProtectedError
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -56,7 +55,7 @@ def panel_inicio(request):
 			"total_usuarios": User.objects.count(),
 			"usuarios_activos": User.objects.filter(is_active=True).count(),
 			"ejercicios": Ejercicio.objects.count(),
-			"entrenamientos": Entrenamiento.objects.count(),
+			"entrenamientos": Entrenamiento.objects.filter(eliminada=False).count(),
 			"sesiones": SesionEntrenamiento.objects.count(),
 			"ultimos_usuarios": User.objects.order_by("-date_joined")[:8],
 		},
@@ -191,7 +190,7 @@ def ejercicio_editar(request, ejercicio_id):
 @staff_required
 def entrenamientos(request):
 	query = request.GET.get("q", "").strip()
-	queryset = Entrenamiento.objects.annotate(
+	queryset = Entrenamiento.objects.filter(eliminada=False).annotate(
 		usuario_nombre=Min(
 			"usuarios__usuario__username",
 			filter=Q(usuarios__activa=True),
@@ -225,37 +224,18 @@ def entrenamiento_nuevo(request):
 @staff_required
 @require_http_methods(["POST"])
 def entrenamiento_eliminar(request, entrenamiento_id):
-	entrenamiento = get_object_or_404(Entrenamiento, pk=entrenamiento_id)
-	try:
-		with transaction.atomic():
-			Entrenamiento.objects.filter(rutina_origen=entrenamiento).update(
-				rutina_origen_id=entrenamiento.rutina_origen_id
-			)
-			for asignacion in UsuarioEntrenamiento.objects.filter(
-				entrenamiento=entrenamiento
-			):
-				SesionEntrenamiento.objects.filter(
-					usuario_entrenamiento=asignacion
-				).delete()
-				UsuarioEntrenamientoEjercicio.objects.filter(
-					usuario_entrenamiento=asignacion
-				).delete()
-				asignacion.delete()
-			EntrenamientoEjercicio.objects.filter(entrenamiento=entrenamiento).delete()
-			nombre = entrenamiento.nombre
-			entrenamiento.delete()
-	except ProtectedError:
-		messages.error(
-			request,
-			"No se pudo eliminar la rutina porque algunos de sus ejercicios "
-			"siguen vinculados a registros de otras rutinas.",
+	entrenamiento = get_object_or_404(Entrenamiento, pk=entrenamiento_id, eliminada=False)
+	with transaction.atomic():
+		entrenamiento.eliminada = True
+		entrenamiento.save(update_fields=["eliminada"])
+		UsuarioEntrenamiento.objects.filter(entrenamiento=entrenamiento).update(
+			activa=False
 		)
-	else:
-		messages.success(
-			request,
-			f"Se eliminó la rutina {nombre} junto con sus sesiones e historial. "
-			"Las copias de otros usuarios se conservaron.",
-		)
+	messages.success(
+		request,
+		f"Se eliminó la rutina {entrenamiento.nombre}. "
+		"Las sesiones registradas y su historial se conservaron.",
+	)
 	return redirect("panel_admin:entrenamientos")
 
 
@@ -263,6 +243,9 @@ def entrenamiento_eliminar(request, entrenamiento_id):
 @require_http_methods(["GET", "POST"])
 def entrenamiento_detalle(request, entrenamiento_id):
 	entrenamiento = get_object_or_404(Entrenamiento, pk=entrenamiento_id)
+	if entrenamiento.eliminada and request.method == "POST":
+		messages.error(request, "Esta rutina está eliminada y no se puede modificar.")
+		return redirect("panel_admin:entrenamientos")
 	action = request.POST.get("action") if request.method == "POST" else None
 	form = AdminEntrenamientoForm(
 		request.POST if action == "guardar_rutina" else None, instance=entrenamiento
@@ -345,6 +328,9 @@ def entrenamiento_detalle(request, entrenamiento_id):
 			"asignacion_form": asignacion_form,
 			"ejercicio_form": ejercicio_form,
 			"asignacion": asignacion,
+			"sesiones_count": SesionEntrenamiento.objects.filter(
+				usuario_entrenamiento__entrenamiento=entrenamiento
+			).count(),
 			"ejercicios_rutina": EntrenamientoEjercicio.objects.filter(
 				entrenamiento=entrenamiento
 			)
@@ -380,6 +366,9 @@ def entrenamiento_usuario_desasignar(request, entrenamiento_id, asignacion_id):
 @require_http_methods(["GET", "POST"])
 def entrenamiento_ejercicio_editar(request, entrenamiento_id, entrada_id):
 	entrenamiento = get_object_or_404(Entrenamiento, pk=entrenamiento_id)
+	if entrenamiento.eliminada:
+		messages.error(request, "Esta rutina está eliminada y no se puede modificar.")
+		return redirect("panel_admin:entrenamientos")
 	entrada = get_object_or_404(
 		EntrenamientoEjercicio.objects.select_related("ejercicio"),
 		pk=entrada_id,
@@ -411,6 +400,9 @@ def entrenamiento_ejercicio_editar(request, entrenamiento_id, entrada_id):
 @require_http_methods(["POST"])
 def entrenamiento_ejercicio_eliminar(request, entrenamiento_id, entrada_id):
 	entrenamiento = get_object_or_404(Entrenamiento, pk=entrenamiento_id)
+	if entrenamiento.eliminada:
+		messages.error(request, "Esta rutina está eliminada y no se puede modificar.")
+		return redirect("panel_admin:entrenamientos")
 	entrada = get_object_or_404(
 		EntrenamientoEjercicio, pk=entrada_id, entrenamiento=entrenamiento
 	)

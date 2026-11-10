@@ -95,6 +95,7 @@ class Entrenamiento(models.Model):
 	nombre = models.CharField(max_length=120)
 	descripcion = models.TextField(blank=True)
 	fecha_creacion = models.DateTimeField(auto_now_add=True)
+	eliminada = models.BooleanField(default=False)
 	rutina_origen = models.ForeignKey(
 		"self",
 		on_delete=models.PROTECT,

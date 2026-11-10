@@ -2,6 +2,7 @@
 {% block title %}{{ entrenamiento.nombre }} | Administración{% endblock %}
 {% block content %}
 <div class="heading"><div><div class="eyebrow"><a class="row-link" href="{% url 'panel_admin:entrenamientos' %}">Rutinas</a> / Detalle</div><h1>{{ entrenamiento.nombre }}</h1><p>{{ entrenamiento.descripcion|default:"Sin descripción" }}</p><p class="help">Esta rutina pertenece a un usuario. Al asignarla a otra persona se crea una copia independiente y sus cambios no afectan a la original.</p></div><a class="button secondary" href="{% url 'panel_admin:sesiones' %}?rutina={{ entrenamiento.pk }}">Ver sesiones</a></div>
+{% if entrenamiento.eliminada %}<section class="form-section"><h2>Rutina eliminada</h2><p>Ya no aparece entre las rutinas disponibles. Se conservaron {{ sesiones_count }} sesiones y todo su historial.</p></section>{% else %}
 <div class="detail-grid">
     <section class="form-section"><h2>Datos de la rutina</h2><form class="inline-form" method="post">{% csrf_token %}<input type="hidden" name="action" value="guardar_rutina">{{ form.non_field_errors }}{% for field in form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="errors">{{ field.errors }}</div>{% endif %}</div>{% endfor %}<button class="button" type="submit">Guardar rutina</button></form></section>
     <section class="form-section"><div class="section-head"><h2>Propietario</h2></div>
@@ -13,4 +14,5 @@
         <form class="inline-form" method="post">{% csrf_token %}<input type="hidden" name="action" value="anadir_ejercicio"><h3>Añadir ejercicio</h3>{{ ejercicio_form.non_field_errors }}{% for field in ejercicio_form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="errors">{{ field.errors }}</div>{% endif %}</div>{% endfor %}<button class="button" type="submit">Añadir a la rutina</button></form>
     </section>
 </div>
+{% endif %}
 {% endblock %}
