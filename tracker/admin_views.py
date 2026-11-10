@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.views import redirect_to_login
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Min, Q
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -30,7 +30,7 @@ from .models import (
 	UsuarioEntrenamiento,
 	UsuarioEntrenamientoEjercicio,
 )
-from .services import copiar_plantilla_para_usuario, eliminar_serie_y_reenumerar
+from .services import copiar_rutina_para_usuario, eliminar_serie_y_reenumerar
 
 
 def staff_required(view_func):
@@ -190,8 +190,10 @@ def ejercicio_editar(request, ejercicio_id):
 @staff_required
 def entrenamientos(request):
 	query = request.GET.get("q", "").strip()
-	queryset = Entrenamiento.objects.filter(es_plantilla=True).annotate(
-		usuarios_count=Count("copias__usuarios", distinct=True),
+	queryset = Entrenamiento.objects.select_related("plantilla").annotate(
+		usuarios_count=Count("usuarios", distinct=True),
+		copias_count=Count("copias", distinct=True),
+		usuario_nombre=Min("usuarios__usuario__username"),
 		ejercicios_count=Count("ejercicios", distinct=True),
 	).order_by("nombre")
 	if query:
@@ -239,18 +241,18 @@ def entrenamiento_detalle(request, entrenamiento_id):
 		messages.success(request, "La rutina se actualizó.")
 		return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
 	if action == "asignar_usuario" and asignacion_form.is_valid():
-		if not entrenamiento.es_plantilla:
-			messages.error(request, "Solo se pueden asignar plantillas. Esta rutina es personal.")
-			return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
 		try:
 			with transaction.atomic():
 				usuario = asignacion_form.cleaned_data["usuario"]
 				asignacion = UsuarioEntrenamiento.objects.filter(
-					usuario=usuario, entrenamiento__plantilla=entrenamiento
+					usuario=usuario
+				).filter(
+					Q(entrenamiento=entrenamiento)
+					| Q(entrenamiento__plantilla=entrenamiento)
 				).select_related("entrenamiento").first()
 				creada = asignacion is None
 				if creada:
-					asignacion = copiar_plantilla_para_usuario(entrenamiento, usuario)
+					asignacion = copiar_rutina_para_usuario(entrenamiento, usuario)
 				reactivada = not creada and not asignacion.activa
 				if reactivada:
 					asignacion.activa = True
@@ -263,7 +265,7 @@ def entrenamiento_detalle(request, entrenamiento_id):
 		else:
 			messages.success(
 				request,
-				f"Rutina {'asignada' if creada else 'reactivada' if reactivada else 'ya activa'} "
+				f"Rutina {'copiada y asignada' if creada else 'reactivada'} "
 				f"para {asignacion.usuario.username}.",
 			)
 			return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
@@ -286,17 +288,14 @@ def entrenamiento_detalle(request, entrenamiento_id):
 		else:
 			messages.success(
 				request,
-				"Ejercicio añadido a la plantilla."
+				"Ejercicio añadido a la rutina."
 				if entrenamiento.es_plantilla
 				else "Ejercicio añadido a la rutina personal.",
 			)
 			return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
-	if entrenamiento.es_plantilla:
-		asignaciones = UsuarioEntrenamiento.objects.filter(
-			entrenamiento__plantilla=entrenamiento
-		)
-	else:
-		asignaciones = UsuarioEntrenamiento.objects.filter(entrenamiento=entrenamiento)
+	asignaciones = UsuarioEntrenamiento.objects.filter(
+		Q(entrenamiento=entrenamiento) | Q(entrenamiento__plantilla=entrenamiento)
+	)
 	return render(
 		request,
 		"tracker/admin/entrenamiento_detalle.html",
@@ -320,11 +319,12 @@ def entrenamiento_detalle(request, entrenamiento_id):
 
 @staff_required
 @require_http_methods(["POST"])
-def entrenamiento_usuario_desasignar(request, entrenamiento_id, user_id):
+def entrenamiento_usuario_desasignar(request, entrenamiento_id, asignacion_id):
 	asignacion = get_object_or_404(
 		UsuarioEntrenamiento.objects.select_related("usuario", "entrenamiento"),
-		entrenamiento__plantilla_id=entrenamiento_id,
-		usuario_id=user_id,
+		Q(entrenamiento_id=entrenamiento_id)
+		| Q(entrenamiento__plantilla_id=entrenamiento_id),
+		pk=asignacion_id,
 	)
 	if asignacion.activa:
 		asignacion.activa = False

@@ -415,6 +415,53 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertEqual(entrada_plantilla.orden, 1)
 		self.assertEqual(entrada_personal.orden, 1)
 
+	def test_panel_admin_lista_todas_las_rutinas_y_asignar_copia_cualquier_rutina(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="test-password-123",
+		)
+		usuario_origen = get_user_model().objects.create_user(
+			username="origen",
+			email="origen@example.com",
+			password="test-password-123",
+		)
+		usuario_destino = get_user_model().objects.create_user(
+			username="destino",
+			email="destino@example.com",
+			password="test-password-123",
+		)
+		rutina = Entrenamiento.objects.create(nombre="Tren Superior")
+		ejercicio = Ejercicio.objects.create(nombre="Remo", grupo_muscular="Espalda")
+		entrada = EntrenamientoEjercicio.objects.create(
+			entrenamiento=rutina, ejercicio=ejercicio, orden=1
+		)
+		asignacion_origen = UsuarioEntrenamiento.objects.create(
+			usuario=usuario_origen, entrenamiento=rutina
+		)
+		UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion_origen,
+			entrenamiento_ejercicio=entrada,
+		)
+		self.client.force_login(admin_user)
+
+		respuesta = self.client.get(reverse("panel_admin:entrenamientos"))
+		self.assertContains(respuesta, "Rutinas")
+		self.assertContains(respuesta, "Tren Superior")
+		self.assertContains(respuesta, "origen")
+
+		respuesta = self.client.post(
+			reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk]),
+			{"action": "asignar_usuario", "usuario": usuario_destino.pk},
+		)
+		self.assertRedirects(
+			respuesta, reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk])
+		)
+		asignacion_destino = UsuarioEntrenamiento.objects.get(usuario=usuario_destino)
+		self.assertNotEqual(asignacion_destino.entrenamiento_id, rutina.pk)
+		self.assertEqual(asignacion_destino.entrenamiento.plantilla_id, rutina.pk)
+		self.assertEqual(asignacion_destino.entrenamiento.ejercicios.get().ejercicio, ejercicio)
+
 	def test_panel_admin_edita_sesiones_y_series_sin_romper_referencias(self):
 		admin_user = get_user_model().objects.create_superuser(
 			username="admin",
@@ -636,7 +683,7 @@ class AutenticacionYRutinasTests(TestCase):
 		respuesta = self.client.post(
 			reverse(
 				"panel_admin:entrenamiento_usuario_desasignar",
-				args=[entrenamiento.pk, usuario.pk],
+				args=[entrenamiento.pk, asignacion.pk],
 			)
 		)
 		self.assertRedirects(
