@@ -144,7 +144,10 @@ class UsuarioEntrenamiento(models.Model):
 		constraints = [
 			models.UniqueConstraint(
 				fields=["usuario", "entrenamiento"], name="unique_usuario_entrenamiento"
-			)
+			),
+			models.UniqueConstraint(
+				fields=["entrenamiento"], name="unique_entrenamiento_propietario"
+			),
 		]
 		indexes = [models.Index(fields=["usuario"]), models.Index(fields=["entrenamiento"])]
 

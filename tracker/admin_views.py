@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.views import redirect_to_login
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Min, Q
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -190,19 +190,13 @@ def ejercicio_editar(request, ejercicio_id):
 @staff_required
 def entrenamientos(request):
 	query = request.GET.get("q", "").strip()
-	queryset = Entrenamiento.objects.filter(rutina_origen__isnull=True).annotate(
-		asignaciones_count=Count(
-			"usuarios__pk",
+	queryset = Entrenamiento.objects.annotate(
+		usuario_nombre=Min(
+			"usuarios__usuario__username",
 			filter=Q(usuarios__activa=True),
-			distinct=True,
-		),
-		copias_asignaciones_count=Count(
-			"copias__usuarios__pk",
-			filter=Q(copias__usuarios__activa=True),
-			distinct=True,
 		),
 		ejercicios_count=Count("ejercicios", distinct=True),
-	).order_by("nombre")
+	).order_by("nombre", "pk")
 	if query:
 		queryset = queryset.filter(Q(nombre__icontains=query) | Q(descripcion__icontains=query))
 	return render(
@@ -231,11 +225,6 @@ def entrenamiento_nuevo(request):
 @require_http_methods(["GET", "POST"])
 def entrenamiento_detalle(request, entrenamiento_id):
 	entrenamiento = get_object_or_404(Entrenamiento, pk=entrenamiento_id)
-	if entrenamiento.rutina_origen_id is not None:
-		return redirect(
-			"panel_admin:entrenamiento_detalle",
-			entrenamiento_id=entrenamiento.rutina_origen_id,
-		)
 	action = request.POST.get("action") if request.method == "POST" else None
 	form = AdminEntrenamientoForm(
 		request.POST if action == "guardar_rutina" else None, instance=entrenamiento
@@ -254,11 +243,13 @@ def entrenamiento_detalle(request, entrenamiento_id):
 		try:
 			with transaction.atomic():
 				usuario = asignacion_form.cleaned_data["usuario"]
+				rutina_origen = entrenamiento.rutina_origen or entrenamiento
+				rutinas_relacionadas = Entrenamiento.objects.filter(
+					Q(pk=rutina_origen.pk) | Q(rutina_origen=rutina_origen)
+				)
 				asignacion = UsuarioEntrenamiento.objects.filter(
-					usuario=usuario
-				).filter(
-					Q(entrenamiento=entrenamiento)
-					| Q(entrenamiento__rutina_origen=entrenamiento)
+					usuario=usuario,
+					entrenamiento__in=rutinas_relacionadas,
 				).select_related("entrenamiento").order_by("-activa").first()
 				creada = asignacion is None
 				if creada:
@@ -268,10 +259,10 @@ def entrenamiento_detalle(request, entrenamiento_id):
 					asignacion.activa = True
 					asignacion.save(update_fields=["activa"])
 			if not creada and not reactivada:
-				messages.error(request, "Este usuario ya tiene asignada la rutina.")
+				messages.error(request, "Este usuario ya tiene su propia copia de esta rutina.")
 				return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
 		except IntegrityError:
-			messages.error(request, "Este usuario ya tiene asignada la rutina.")
+			messages.error(request, "No se pudo crear otra copia para este usuario.")
 		else:
 			messages.success(
 				request,
@@ -301,10 +292,12 @@ def entrenamiento_detalle(request, entrenamiento_id):
 			)
 			return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
 	asignaciones = UsuarioEntrenamiento.objects.filter(
-		Q(entrenamiento=entrenamiento)
-		| Q(entrenamiento__rutina_origen=entrenamiento),
+		entrenamiento=entrenamiento,
 		activa=True,
 	)
+	asignacion = asignaciones.select_related("usuario").annotate(
+		sesiones_count=Count("sesiones", distinct=True)
+	).first()
 	return render(
 		request,
 		"tracker/admin/entrenamiento_detalle.html",
@@ -313,8 +306,7 @@ def entrenamiento_detalle(request, entrenamiento_id):
 			"form": form,
 			"asignacion_form": asignacion_form,
 			"ejercicio_form": ejercicio_form,
-			"asignaciones": asignaciones.select_related("usuario")
-			.annotate(sesiones_count=Count("sesiones", distinct=True)),
+			"asignacion": asignacion,
 			"ejercicios_rutina": EntrenamientoEjercicio.objects.filter(
 				entrenamiento=entrenamiento
 			)
@@ -330,8 +322,7 @@ def entrenamiento_detalle(request, entrenamiento_id):
 def entrenamiento_usuario_desasignar(request, entrenamiento_id, asignacion_id):
 	asignacion = get_object_or_404(
 		UsuarioEntrenamiento.objects.select_related("usuario", "entrenamiento"),
-		Q(entrenamiento_id=entrenamiento_id)
-		| Q(entrenamiento__rutina_origen_id=entrenamiento_id),
+		entrenamiento_id=entrenamiento_id,
 		pk=asignacion_id,
 	)
 	if asignacion.activa:
@@ -415,10 +406,8 @@ def sesiones(request):
 	if rutina_id.isdigit():
 		entrenamiento = Entrenamiento.objects.filter(pk=int(rutina_id)).first()
 		if entrenamiento is not None:
-			rutina_origen = entrenamiento.rutina_origen or entrenamiento
 			queryset = queryset.filter(
-				Q(usuario_entrenamiento__entrenamiento_id=rutina_origen.pk)
-				| Q(usuario_entrenamiento__entrenamiento__rutina_origen=rutina_origen)
+				usuario_entrenamiento__entrenamiento_id=entrenamiento.pk
 			)
 	return render(
 		request,
@@ -426,9 +415,12 @@ def sesiones(request):
 		{
 			"page_obj": Paginator(queryset, 30).get_page(request.GET.get("page")),
 			"usuarios": get_user_model().objects.order_by("username"),
-			"entrenamientos": Entrenamiento.objects.filter(
-				rutina_origen__isnull=True
-			).order_by("nombre"),
+			"entrenamientos": Entrenamiento.objects.annotate(
+				usuario_nombre=Min(
+					"usuarios__usuario__username",
+					filter=Q(usuarios__activa=True),
+				)
+			).order_by("nombre", "pk"),
 			"usuario_id": usuario_id,
 			"rutina_id": rutina_id,
 		},
