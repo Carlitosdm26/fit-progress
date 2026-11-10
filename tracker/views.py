@@ -451,13 +451,17 @@ def eliminar_entrenamiento(request, asignacion_id):
 	perfil = perfil_actual(request)
 	if perfil is None:
 		return redirect("login")
-	asignacion = UsuarioEntrenamiento.objects.select_related("entrenamiento").filter(
-		pk=asignacion_id, usuario=perfil, activa=True
-	).first()
-	if asignacion is None:
-		return redirect("dashboard")
-	entrenamiento = asignacion.entrenamiento
 	with transaction.atomic():
+		asignacion = UsuarioEntrenamiento.objects.select_for_update().filter(
+			pk=asignacion_id, usuario=perfil, activa=True
+		).first()
+		if asignacion is None:
+			return redirect("dashboard")
+		entrenamiento = Entrenamiento.objects.select_for_update().get(
+			pk=asignacion.entrenamiento_id
+		)
+		if entrenamiento.eliminada:
+			return redirect("dashboard")
 		entrenamiento.eliminada = True
 		entrenamiento.save(update_fields=["eliminada"])
 		UsuarioEntrenamiento.objects.filter(entrenamiento=entrenamiento).update(

@@ -175,6 +175,7 @@
             {% if user.is_active %}
             <span class="nav-area-label">Área cliente</span>
             <a href="{% url 'inicio' %}"{% if request.resolver_match.url_name == 'inicio' or request.resolver_match.url_name == 'dashboard' %} aria-current="page"{% endif %}>Inicio</a>
+            <a href="{% url 'inicio' %}#rutinas"{% if request.resolver_match.url_name == 'inicio' or request.resolver_match.url_name == 'dashboard' %} aria-current="location"{% endif %}>Rutinas</a>
             <a href="{% url 'ejercicios' %}"{% if request.resolver_match.url_name == 'ejercicios' %} aria-current="page"{% endif %}>Ejercicios</a>
             <a href="{% url 'historial_sesiones' %}"{% if request.resolver_match.url_name == 'historial_sesiones' %} aria-current="page"{% endif %}>Sesiones</a>
             <a href="{% url 'crear_entrenamiento' %}"{% if request.resolver_match.url_name == 'crear_entrenamiento' %} aria-current="page"{% endif %}>Nueva rutina</a>
