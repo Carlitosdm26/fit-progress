@@ -161,7 +161,7 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertEqual(respuesta.status_code, 200)
 		self.assertContains(respuesta, "Cuentas registradas")
 		self.assertContains(respuesta, "Abrir menú de administración")
-		self.assertContains(respuesta, "Volver a la app")
+		self.assertContains(respuesta, "Volver al área cliente")
 		self.assertContains(respuesta, ".menu-toggle { display: block; }")
 		self.assertContains(
 			respuesta, '<path d="M3 6h18M3 12h18M3 18h18"></path>'
@@ -171,6 +171,33 @@ class AutenticacionYRutinasTests(TestCase):
 			html.index('<header class="topline">'),
 			html.index('<button class="menu-toggle"'),
 		)
+
+	def test_menu_cliente_es_desplegable_y_separa_administracion(self):
+		usuario = get_user_model().objects.create_user(
+			username="cliente",
+			email="cliente@example.com",
+		)
+		self.client.force_login(usuario)
+
+		respuesta = self.client.get(reverse("inicio"))
+
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(respuesta, "Abrir menú de cliente")
+		self.assertContains(respuesta, 'aria-controls="client-navigation"')
+		self.assertContains(respuesta, "Área cliente")
+		self.assertNotContains(respuesta, 'class="admin-nav-link"')
+		self.assertContains(respuesta, ".nav-links.is-open { display: flex; }")
+		self.assertContains(
+			respuesta,
+			".button.danger { border: 1px solid #a52b23; background: var(--green); color: #a52b23; }",
+		)
+
+		usuario.is_staff = True
+		usuario.save(update_fields=["is_staff"])
+		respuesta = self.client.get(reverse("inicio"))
+
+		self.assertContains(respuesta, 'class="admin-nav-link"')
+		self.assertContains(respuesta, "Administración")
 
 	def test_staff_no_puede_conceder_privilegios_ni_editar_superusuarios(self):
 		staff_user = get_user_model().objects.create_user(
@@ -510,7 +537,8 @@ class AutenticacionYRutinasTests(TestCase):
 			usuario_entrenamiento=asignacion, entrenamiento_ejercicio=entrada
 		)
 		sesion = SesionEntrenamiento.objects.create(
-			usuario_entrenamiento=asignacion, fecha=timezone.now()
+			usuario_entrenamiento=asignacion,
+			fecha=timezone.now(),
 		)
 		series = [
 			Serie.objects.create(
@@ -1452,3 +1480,77 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 
 		self.assertEqual(respuesta.status_code, 200)
 		self.assertContains(respuesta, "Notas del entrenamiento: control de tempo.")
+
+	def test_editar_sesion_precarga_el_numero_de_series_y_sus_valores(self):
+		cuenta = get_user_model().objects.create_user(
+			username="lucia@example.com", email="lucia@example.com",
+		)
+		entrenamiento = Entrenamiento.objects.create(nombre="Pierna")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=cuenta, entrenamiento=entrenamiento
+		)
+		ejercicio = Ejercicio.objects.create(nombre="Prensa", grupo_muscular="Piernas")
+		entrada = EntrenamientoEjercicio.objects.create(
+			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion, entrenamiento_ejercicio=entrada
+		)
+		sesion = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion,
+			fecha=timezone.now(),
+			notas="Controlar el tempo",
+		)
+		series_guardadas = [
+			(12, Decimal("40.50")),
+			(10, Decimal("42.00")),
+			(8, Decimal("44.25")),
+		]
+		for numero, (repeticiones, peso) in enumerate(series_guardadas, start=1):
+			Serie.objects.create(
+				sesion_entrenamiento=sesion,
+				usuario_entrenamiento_ejercicio=seleccion,
+				numero_serie=numero,
+				repeticiones=repeticiones,
+				peso=peso,
+			)
+		self.client.force_login(cuenta)
+
+		url = reverse("editar_sesion", args=[sesion.pk])
+		respuesta = self.client.get(url, {"ejercicio": seleccion.pk})
+
+		self.assertEqual(respuesta.status_code, 200)
+		form = respuesta.context["form"]
+		self.assertEqual(form["numero_series"].value(), 3)
+		self.assertEqual(form["notas"].value(), "Controlar el tempo")
+		for numero, (repeticiones, peso) in enumerate(series_guardadas, start=1):
+			self.assertEqual(form[f"reps_{numero}"].value(), repeticiones)
+			self.assertEqual(form[f"peso_{numero}"].value(), peso)
+
+		respuesta = self.client.post(
+			url,
+			{
+				"editar_ejercicio": seleccion.pk,
+				"ejercicio": seleccion.pk,
+				"numero_series": 3,
+				"reps_1": 12,
+				"peso_1": "40.50",
+				"reps_2": 10,
+				"peso_2": "42.00",
+				"reps_3": 8,
+				"peso_3": "44.25",
+				"notas": "Controlar el tempo",
+			},
+		)
+
+		self.assertRedirects(respuesta, url)
+		sesion.refresh_from_db()
+		self.assertEqual(sesion.notas, "Controlar el tempo")
+		self.assertEqual(
+			list(
+				sesion.series.order_by("numero_serie").values_list(
+					"repeticiones", "peso"
+				)
+			),
+			[(repeticiones, peso) for repeticiones, peso in series_guardadas],
+		)

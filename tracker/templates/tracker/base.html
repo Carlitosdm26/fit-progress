@@ -31,6 +31,11 @@
         .nav-links { display: flex; align-items: center; gap: 8px; }
         .nav-links > a { padding: 11px 13px; border-bottom: 2px solid transparent; }
         .nav-links > a:hover, .nav-links > a[aria-current="page"] { border-color: var(--green); color: var(--green); }
+        .nav-area-label { color: var(--green); font: 700 .68rem "DM Sans", sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+        .admin-nav-link { margin-left: 5px; border-left: 1px solid #647064; padding-left: 17px !important; color: var(--green) !important; }
+        .client-menu-toggle { display: none; flex: 0 0 42px; width: 42px; height: 42px; border: 1px solid var(--green); background: var(--green); color: var(--ink); cursor: pointer; }
+        .client-menu-toggle svg { display: block; width: 22px; height: 22px; margin: auto; }
+        .client-menu-toggle:focus-visible { outline: 2px solid white; outline-offset: 2px; }
         .site-main { width: min(1240px, calc(100% - 40px)); margin: 0 auto; padding: 42px 0 64px; }
         h1, h2, h3 { color: var(--ink); }
         h1 { margin: 8px 0 12px; font: 800 clamp(3rem, 6vw, 5rem)/.9 "Barlow Condensed", sans-serif; text-transform: uppercase; }
@@ -43,7 +48,8 @@
         .button:hover { background: #b9eb36; transform: translateY(-1px); }
         .button.secondary { background: var(--ink); color: white; }
         .button.secondary:hover { background: var(--green-dark); }
-        .button.danger { background: #a52b23; color: white; }
+        .button.danger { border: 1px solid #a52b23; background: var(--green); color: #a52b23; }
+        .button.danger:hover { background: #b9eb36; color: #8f211b; }
         .button.small { min-height: 38px; padding: 9px 12px; font-size: .75rem; }
         .actions { display: flex; flex-wrap: wrap; gap: 9px; margin: 22px 0 32px; }
         .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 30px 0 34px; }
@@ -122,10 +128,16 @@
         .empty-state { grid-column: 1 / -1; color: var(--muted); }
         .notes-box { background: white; border: 1px solid var(--line); border-left: 4px solid var(--green); padding: 16px; margin: 18px 0 24px; }
         .set-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 10px 0; border-top: 1px solid var(--line); }
-        @media (max-width: 760px) {
-            nav { width: min(100% - 28px, 1240px); min-height: 66px; flex-wrap: wrap; padding: 12px 0; }
-            .nav-links { width: 100%; justify-content: flex-start; gap: 2px; overflow-x: auto; }
-            .nav-links > a { padding: 10px 9px; font-size: .7rem; white-space: nowrap; }
+        @media (max-width: 900px) {
+            nav { width: min(100% - 28px, 1240px); min-height: 66px; flex-wrap: wrap; gap: 0 12px; padding: 12px 0; }
+            .client-menu-toggle { display: block; }
+            .nav-links { display: none; width: 100%; flex-direction: column; align-items: stretch; gap: 2px; overflow: visible; padding: 10px 0 0; }
+            .nav-links.is-open { display: flex; }
+            .nav-area-label { padding: 8px 10px 4px; }
+            .nav-links > a { width: 100%; padding: 11px 10px; border: 0; border-left: 3px solid transparent; font-size: .78rem; text-align: left; white-space: normal; }
+            .nav-links > .admin-nav-link { margin: 5px 0 0; border-left: 3px solid var(--green); padding-left: 10px !important; background: rgba(168, 217, 31, .1); }
+            .logout-form { width: 100%; padding-top: 7px; border-top: 1px solid #647064; }
+            .logout-form .button { width: 100%; }
             .site-main { width: min(100% - 28px, 1240px); padding-top: 30px; }
             .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
             .stat { min-height: 112px; padding: 14px 12px; }
@@ -158,13 +170,15 @@
     <nav aria-label="Navegación principal">
         <a class="brand" href="{% url 'inicio' %}"><span class="brand-mark" aria-hidden="true">FP</span><span class="brand-name">FIT <strong>PROGRESS</strong></span></a>
         {% if user.is_authenticated %}
-        <div class="nav-links">
+        <button class="client-menu-toggle" type="button" aria-label="Abrir menú de cliente" aria-expanded="false" aria-controls="client-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"></path></svg></button>
+        <div class="nav-links" id="client-navigation">
             {% if user.is_active %}
+            <span class="nav-area-label">Área cliente</span>
             <a href="{% url 'inicio' %}"{% if request.resolver_match.url_name == 'inicio' or request.resolver_match.url_name == 'dashboard' %} aria-current="page"{% endif %}>Inicio</a>
             <a href="{% url 'ejercicios' %}"{% if request.resolver_match.url_name == 'ejercicios' %} aria-current="page"{% endif %}>Ejercicios</a>
             <a href="{% url 'historial_sesiones' %}"{% if request.resolver_match.url_name == 'historial_sesiones' %} aria-current="page"{% endif %}>Historial</a>
             <a href="{% url 'crear_entrenamiento' %}"{% if request.resolver_match.url_name == 'crear_entrenamiento' %} aria-current="page"{% endif %}>Nueva rutina</a>
-            {% if user.is_staff %}<a href="{% url 'panel_admin:inicio' %}">Administración</a>{% endif %}
+            {% if user.is_staff %}<a class="admin-nav-link" href="{% url 'panel_admin:inicio' %}">Administración</a>{% endif %}
             {% endif %}
             <form method="post" action="{% url 'logout' %}" class="logout-form">{% csrf_token %}<button class="button" type="submit">Salir</button></form>
         </div>
@@ -175,5 +189,33 @@
     {% for message in messages %}<div class="message">{{ message }}</div>{% endfor %}
     {% block content %}{% endblock %}
 </main>
+{% if user.is_authenticated %}
+<script>
+    const clientMenuToggle = document.querySelector(".client-menu-toggle");
+    const clientNavigation = document.querySelector("#client-navigation");
+
+    function closeClientMenu() {
+        clientMenuToggle.setAttribute("aria-expanded", "false");
+        clientMenuToggle.setAttribute("aria-label", "Abrir menú de cliente");
+        clientNavigation.classList.remove("is-open");
+    }
+
+    clientMenuToggle.addEventListener("click", () => {
+        const isExpanded = clientMenuToggle.getAttribute("aria-expanded") === "true";
+        clientMenuToggle.setAttribute("aria-expanded", String(!isExpanded));
+        clientMenuToggle.setAttribute(
+            "aria-label",
+            isExpanded ? "Abrir menú de cliente" : "Cerrar menú de cliente"
+        );
+        clientNavigation.classList.toggle("is-open", !isExpanded);
+    });
+
+    clientNavigation.addEventListener("click", (event) => {
+        if (event.target.closest("a")) {
+            closeClientMenu();
+        }
+    });
+</script>
+{% endif %}
 </body>
 </html>
