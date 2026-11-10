@@ -83,6 +83,15 @@ class SeguimientoModelTests(TestCase):
 				usuario=self.usuario, entrenamiento=self.entrenamiento
 			)
 
+	def test_una_rutina_no_puede_tener_dos_propietarios(self):
+		otro_usuario = get_user_model().objects.create_user(
+			username="otra-persona", email="otra@example.com"
+		)
+		with self.assertRaises(IntegrityError):
+			UsuarioEntrenamiento.objects.create(
+				usuario=otro_usuario, entrenamiento=self.entrenamiento
+			)
+
 	def test_no_se_puede_borrar_ejercicio_con_historial(self):
 		Serie.objects.create(
 			sesion_entrenamiento=self.sesion,
@@ -415,7 +424,7 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertEqual(entrada_plantilla.orden, 1)
 		self.assertEqual(entrada_personal.orden, 1)
 
-	def test_panel_admin_lista_todas_las_rutinas_y_asignar_copia_cualquier_rutina(self):
+	def test_panel_admin_lista_rutinas_por_usuario_y_asignar_crea_copia_independiente(self):
 		admin_user = get_user_model().objects.create_superuser(
 			username="admin",
 			email="admin@example.com",
@@ -448,7 +457,7 @@ class AutenticacionYRutinasTests(TestCase):
 		respuesta = self.client.get(reverse("panel_admin:entrenamientos"))
 		self.assertContains(respuesta, "Rutinas")
 		self.assertContains(respuesta, "Tren Superior")
-		self.assertContains(respuesta, "1 asignación")
+		self.assertContains(respuesta, "origen")
 		self.assertEqual(respuesta.context["page_obj"].paginator.count, 1)
 
 		respuesta = self.client.post(
@@ -461,24 +470,32 @@ class AutenticacionYRutinasTests(TestCase):
 		respuesta = self.client.get(
 			reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk])
 		)
-		self.assertContains(respuesta, "2 activos")
 		self.assertContains(respuesta, "origen")
-		self.assertContains(respuesta, "destino")
+		self.assertNotContains(
+			respuesta,
+			f'href="{reverse("panel_admin:usuario_detalle", args=[usuario_destino.pk])}">destino</a>',
+		)
 		asignacion_destino = UsuarioEntrenamiento.objects.get(usuario=usuario_destino)
 		self.assertNotEqual(asignacion_destino.entrenamiento_id, rutina.pk)
 		self.assertEqual(asignacion_destino.entrenamiento.rutina_origen_id, rutina.pk)
 		self.assertEqual(asignacion_destino.entrenamiento.ejercicios.get().ejercicio, ejercicio)
 		respuesta = self.client.get(reverse("panel_admin:entrenamientos"))
-		self.assertContains(respuesta, "2 asignaciones")
-		self.assertEqual(respuesta.context["page_obj"].paginator.count, 1)
+		self.assertContains(respuesta, "destino")
+		self.assertEqual(respuesta.context["page_obj"].paginator.count, 2)
 		respuesta = self.client.get(
 			reverse("panel_admin:entrenamiento_detalle", args=[asignacion_destino.entrenamiento_id])
 		)
-		self.assertRedirects(
-			respuesta, reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk])
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(
+			respuesta,
+			f'href="{reverse("panel_admin:usuario_detalle", args=[usuario_destino.pk])}">destino</a>',
+		)
+		self.assertNotContains(
+			respuesta,
+			f'href="{reverse("panel_admin:usuario_detalle", args=[usuario_origen.pk])}">origen</a>',
 		)
 
-	def test_panel_admin_solo_muestra_y_cuenta_asignaciones_activas(self):
+	def test_panel_admin_lista_propietario_y_solo_usuarios_asignados_activos(self):
 		admin_user = get_user_model().objects.create_superuser(
 			username="admin",
 			email="admin@example.com",
@@ -509,38 +526,44 @@ class AutenticacionYRutinasTests(TestCase):
 		self.client.force_login(admin_user)
 
 		respuesta = self.client.get(reverse("panel_admin:entrenamientos"))
-		rutina_en_lista = next(
-			item for item in respuesta.context["page_obj"] if item.pk == rutina.pk
-		)
-		self.assertEqual(rutina_en_lista.asignaciones_count, 0)
-		self.assertEqual(rutina_en_lista.copias_asignaciones_count, 1)
+		self.assertEqual(respuesta.context["page_obj"].paginator.count, 3)
+		self.assertContains(respuesta, "activo")
+		self.assertContains(respuesta, "Sin asignar")
 
 		respuesta = self.client.get(
-			reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk])
+			reverse(
+				"panel_admin:entrenamiento_detalle",
+				args=[asignaciones[0].entrenamiento_id],
+			)
 		)
-		usuario_activo_url = reverse(
-			"panel_admin:usuario_detalle", args=[usuarios[0].pk]
-		)
+		usuario_activo_url = reverse("panel_admin:usuario_detalle", args=[usuarios[0].pk])
 		usuario_inactivo_url = reverse(
 			"panel_admin:usuario_detalle", args=[usuarios[1].pk]
 		)
 		self.assertContains(respuesta, f'href="{usuario_activo_url}">activo</a>')
 		self.assertNotContains(respuesta, f'href="{usuario_inactivo_url}">desasignado</a>')
-		self.assertNotContains(respuesta, "Desasignada")
-		self.assertContains(respuesta, "1 activo")
+		self.assertContains(respuesta, "activo")
 
 		respuesta = self.client.post(
 			reverse(
 				"panel_admin:entrenamiento_usuario_desasignar",
-				args=[rutina.pk, asignaciones[0].pk],
+				args=[asignaciones[0].entrenamiento_id, asignaciones[0].pk],
 			)
 		)
 		self.assertRedirects(
-			respuesta, reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk])
+			respuesta,
+			reverse(
+				"panel_admin:entrenamiento_detalle",
+				args=[asignaciones[0].entrenamiento_id],
+			),
 		)
 		respuesta = self.client.get(
-			reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk])
+			reverse(
+				"panel_admin:entrenamiento_detalle",
+				args=[asignaciones[0].entrenamiento_id],
+			)
 		)
+		self.assertContains(respuesta, "Esta rutina no está asignada actualmente.")
 		self.assertNotContains(respuesta, f'href="{usuario_activo_url}">activo</a>')
 		self.assertNotContains(respuesta, f'href="{usuario_inactivo_url}">desasignado</a>')
 		rutina.refresh_from_db()
@@ -682,12 +705,17 @@ class AutenticacionYRutinasTests(TestCase):
 			for numero in range(1, 4)
 		]
 
+		otra_rutina = Entrenamiento.objects.create(
+			nombre="Torso", rutina_origen=entrenamiento
+		)
 		otra_asignacion = UsuarioEntrenamiento.objects.create(
-			usuario=otro_usuario, entrenamiento=entrenamiento
+			usuario=otro_usuario, entrenamiento=otra_rutina
 		)
 		otra_entrada = UsuarioEntrenamientoEjercicio.objects.create(
 			usuario_entrenamiento=otra_asignacion,
-			entrenamiento_ejercicio=entrada,
+			entrenamiento_ejercicio=EntrenamientoEjercicio.objects.create(
+				entrenamiento=otra_rutina, ejercicio=ejercicio, orden=1
+			),
 		)
 		otra_sesion = SesionEntrenamiento.objects.create(
 			usuario_entrenamiento=otra_asignacion, fecha=timezone.now()
@@ -765,11 +793,15 @@ class AutenticacionYRutinasTests(TestCase):
 		respuesta = self.client.post(
 			reverse(
 				"panel_admin:entrenamiento_usuario_desasignar",
-				args=[entrenamiento.pk, asignacion.pk],
+				args=[asignacion.entrenamiento_id, asignacion.pk],
 			)
 		)
 		self.assertRedirects(
-			respuesta, reverse("panel_admin:entrenamiento_detalle", args=[entrenamiento.pk])
+			respuesta,
+			reverse(
+				"panel_admin:entrenamiento_detalle",
+				args=[asignacion.entrenamiento_id],
+			),
 		)
 		asignacion.refresh_from_db()
 		self.assertFalse(asignacion.activa)
