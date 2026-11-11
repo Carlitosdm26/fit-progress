@@ -6,6 +6,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Min, Q
+from django.db.models.deletion import ProtectedError
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -140,9 +141,81 @@ def usuario_editar(request, user_id):
 		{
 			"form": form,
 			"nuevo": False,
+			"puede_eliminar_usuario": request.user.is_superuser
+			and request.user.pk != usuario.pk,
+			"rutinas_eliminar_count": UsuarioEntrenamiento.objects.filter(
+				usuario=usuario
+			).count(),
+			"sesiones_eliminar_count": SesionEntrenamiento.objects.filter(
+				usuario_entrenamiento__usuario=usuario
+			).count(),
+			"series_eliminar_count": Serie.objects.filter(
+				sesion_entrenamiento__usuario_entrenamiento__usuario=usuario
+			).count(),
 			**_usuario_actividad_context(usuario),
 		},
 	)
+
+
+@staff_required
+@require_http_methods(["POST"])
+def usuario_eliminar(request, user_id):
+	if not request.user.is_superuser:
+		return HttpResponseForbidden("Solo un superusuario puede eliminar cuentas.")
+
+	usuario = get_object_or_404(get_user_model(), pk=user_id)
+	if usuario.pk == request.user.pk:
+		messages.error(request, "No puedes eliminar la cuenta con la que has iniciado sesión.")
+		return redirect("panel_admin:usuario_editar", user_id=usuario.pk)
+	if request.POST.get("confirmacion") != usuario.username:
+		messages.error(
+			request,
+			f"Escribe exactamente «{usuario.username}» para confirmar la eliminación.",
+		)
+		return redirect("panel_admin:usuario_editar", user_id=usuario.pk)
+
+	nombre_usuario = usuario.username
+	try:
+		with transaction.atomic():
+			entrenamiento_ids = list(
+				UsuarioEntrenamiento.objects.filter(usuario=usuario).values_list(
+					"entrenamiento_id", flat=True
+				)
+			)
+			sesiones_count = SesionEntrenamiento.objects.filter(
+				usuario_entrenamiento__usuario=usuario
+			).count()
+			series_count = Serie.objects.filter(
+				sesion_entrenamiento__usuario_entrenamiento__usuario=usuario
+			).count()
+			Serie.objects.filter(
+				sesion_entrenamiento__usuario_entrenamiento__usuario=usuario
+			).delete()
+			SesionEntrenamiento.objects.filter(
+				usuario_entrenamiento__usuario=usuario
+			).delete()
+			UsuarioEntrenamientoEjercicio.objects.filter(
+				usuario_entrenamiento__usuario=usuario
+			).delete()
+			UsuarioEntrenamiento.objects.filter(usuario=usuario).delete()
+			usuario.delete()
+			Entrenamiento.objects.filter(
+				pk__in=entrenamiento_ids, usuarios__isnull=True
+			).delete()
+	except ProtectedError:
+		messages.error(
+			request,
+			f"No se eliminó {nombre_usuario}: hay referencias a su historial "
+			"que no se pueden borrar con seguridad.",
+		)
+		return redirect("panel_admin:usuario_editar", user_id=usuario.pk)
+
+	messages.success(
+		request,
+		f"Se eliminó {nombre_usuario}, sus rutinas, {sesiones_count} sesiones "
+		f"y {series_count} series.",
+	)
+	return redirect("panel_admin:usuarios")
 
 
 @staff_required
@@ -187,8 +260,60 @@ def ejercicio_editar(request, ejercicio_id):
 	return render(
 		request,
 		"tracker/admin/entidad_form.html",
-		{"form": form, "titulo": f"Editar {ejercicio.nombre}", "volver": reverse("panel_admin:ejercicios")},
+		{
+			"form": form,
+			"titulo": f"Editar {ejercicio.nombre}",
+			"volver": reverse("panel_admin:ejercicios"),
+			"ejercicio": ejercicio,
+			"rutinas_asignadas": EntrenamientoEjercicio.objects.filter(
+				ejercicio=ejercicio
+			)
+			.select_related("entrenamiento")
+			.annotate(
+				usuario_nombre=Min(
+					"entrenamiento__usuarios__usuario__username",
+					filter=Q(entrenamiento__usuarios__activa=True),
+				)
+			)
+			.order_by("entrenamiento__nombre"),
+		},
 	)
+
+
+@staff_required
+@require_http_methods(["POST"])
+def ejercicio_eliminar(request, ejercicio_id):
+	ejercicio = get_object_or_404(Ejercicio, pk=ejercicio_id)
+	try:
+		with transaction.atomic():
+			rutinas = list(
+				EntrenamientoEjercicio.objects.filter(ejercicio=ejercicio)
+				.select_related("entrenamiento")
+				.order_by("entrenamiento__nombre")
+			)
+			if not rutinas:
+				ejercicio.delete()
+	except ProtectedError:
+		messages.error(
+			request,
+			f"No se eliminó {ejercicio.nombre}: tiene historial asociado "
+			"que debe conservarse.",
+		)
+		return redirect("panel_admin:ejercicio_editar", ejercicio_id=ejercicio.pk)
+
+	if rutinas:
+		nombres = ", ".join(
+			f"«{entrada.entrenamiento.nombre}»" for entrada in rutinas
+		)
+		messages.error(
+			request,
+			f"No se eliminó {ejercicio.nombre}: está asignado a las rutinas "
+			f"{nombres}. Retíralo de esas rutinas y vuelve a intentarlo.",
+		)
+		return redirect("panel_admin:ejercicio_editar", ejercicio_id=ejercicio.pk)
+
+	messages.success(request, f"Se eliminó el ejercicio {ejercicio.nombre}.")
+	return redirect("panel_admin:ejercicios")
 
 
 @staff_required
@@ -519,6 +644,27 @@ def sesion_detalle(request, sesion_id):
 			**_sesion_series_context(sesion),
 		},
 	)
+
+
+@staff_required
+@require_http_methods(["POST"])
+def sesion_eliminar(request, sesion_id):
+	sesion = get_object_or_404(
+		SesionEntrenamiento.objects.select_related(
+			"usuario_entrenamiento__entrenamiento"
+		),
+		pk=sesion_id,
+	)
+	fecha = sesion.fecha
+	with transaction.atomic():
+		Serie.objects.filter(sesion_entrenamiento=sesion).delete()
+		sesion.delete()
+	messages.success(
+		request,
+		f"Se eliminó la sesión del {fecha:%d/%m/%Y} y sus series. "
+		"La rutina se conservó.",
+	)
+	return redirect("panel_admin:sesiones")
 
 
 def _sesion_series_context(sesion):

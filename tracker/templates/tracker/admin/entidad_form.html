@@ -14,4 +14,16 @@
     </div>
     <div class="form-actions"><button class="button" type="submit">Guardar</button><a class="button secondary" href="{{ volver }}">Cancelar</a></div>
 </form>
+{% if ejercicio %}
+<section class="form-section" style="margin-top: 24px">
+    <h2>Rutinas que usan este ejercicio</h2>
+    {% for entrada in rutinas_asignadas %}
+    <div class="relation-line"><div><a class="row-link" href="{% url 'panel_admin:entrenamiento_detalle' entrada.entrenamiento_id %}">{{ entrada.entrenamiento.nombre }}</a><div class="help">{{ entrada.usuario_nombre|default:"Sin propietario activo" }}{% if entrada.entrenamiento.eliminada %} · Rutina eliminada{% endif %}</div></div></div>
+    {% empty %}<p class="help">Este ejercicio no está asignado a ninguna rutina.</p>{% endfor %}
+    <form method="post" action="{% url 'panel_admin:ejercicio_eliminar' ejercicio.pk %}" onsubmit="return confirm('¿Eliminar este ejercicio? Solo se borrará si ya no está en rutinas ni tiene historial protegido.');">
+        {% csrf_token %}
+        <button class="button" type="submit">Eliminar ejercicio del catálogo</button>
+    </form>
+</section>
+{% endif %}
 {% endblock %}

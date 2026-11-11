@@ -316,6 +316,224 @@ class AutenticacionYRutinasTests(TestCase):
 		)
 		self.assertTrue(cuenta.check_password("jR9!wV4#qT8@zK2"))
 
+	def test_panel_admin_elimina_usuario_y_sus_datos_con_confirmacion(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="test-password",
+		)
+		usuario = get_user_model().objects.create_user(
+			username="cuenta-falsa",
+			email="falsa@example.com",
+			password="test-password",
+		)
+		entrenamiento = Entrenamiento.objects.create(nombre="Rutina falsa")
+		ejercicio = Ejercicio.objects.create(nombre="Press", grupo_muscular="Pecho")
+		entrada = EntrenamientoEjercicio.objects.create(
+			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
+		)
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=usuario, entrenamiento=entrenamiento
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion,
+			entrenamiento_ejercicio=entrada,
+		)
+		sesion = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion, fecha=timezone.now()
+		)
+		serie = Serie.objects.create(
+			sesion_entrenamiento=sesion,
+			usuario_entrenamiento_ejercicio=seleccion,
+			numero_serie=1,
+			repeticiones=8,
+			peso=Decimal("40.00"),
+		)
+		self.client.force_login(admin_user)
+
+		respuesta = self.client.get(
+			reverse("panel_admin:usuario_editar", args=[usuario.pk])
+		)
+		self.assertContains(respuesta, "Eliminar cuenta y todos sus datos")
+		self.assertContains(respuesta, "rutinas (1), sesiones (1) y series (1)")
+
+		respuesta = self.client.post(
+			reverse("panel_admin:usuario_eliminar", args=[usuario.pk]),
+			{"confirmacion": "incorrecto"},
+		)
+		self.assertRedirects(
+			respuesta, reverse("panel_admin:usuario_editar", args=[usuario.pk])
+		)
+		self.assertTrue(get_user_model().objects.filter(pk=usuario.pk).exists())
+		self.assertTrue(Entrenamiento.objects.filter(pk=entrenamiento.pk).exists())
+
+		respuesta = self.client.post(
+			reverse("panel_admin:usuario_eliminar", args=[usuario.pk]),
+			{"confirmacion": usuario.username},
+		)
+
+		self.assertRedirects(respuesta, reverse("panel_admin:usuarios"))
+		self.assertFalse(get_user_model().objects.filter(pk=usuario.pk).exists())
+		self.assertFalse(Entrenamiento.objects.filter(pk=entrenamiento.pk).exists())
+		self.assertFalse(UsuarioEntrenamiento.objects.filter(pk=asignacion.pk).exists())
+		self.assertFalse(SesionEntrenamiento.objects.filter(pk=sesion.pk).exists())
+		self.assertFalse(Serie.objects.filter(pk=serie.pk).exists())
+		self.assertTrue(Ejercicio.objects.filter(pk=ejercicio.pk).exists())
+
+	def test_panel_admin_impide_eliminarse_a_si_mismo_y_restringe_a_superusuarios(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="test-password",
+		)
+		staff_user = get_user_model().objects.create_user(
+			username="staff",
+			email="staff@example.com",
+			password="test-password",
+			is_staff=True,
+		)
+		usuario = get_user_model().objects.create_user(
+			username="usuario",
+			email="usuario@example.com",
+			password="test-password",
+		)
+
+		self.client.force_login(admin_user)
+		respuesta = self.client.post(
+			reverse("panel_admin:usuario_eliminar", args=[admin_user.pk]),
+			{"confirmacion": admin_user.username},
+		)
+		self.assertRedirects(
+			respuesta, reverse("panel_admin:usuario_editar", args=[admin_user.pk])
+		)
+		self.assertTrue(get_user_model().objects.filter(pk=admin_user.pk).exists())
+
+		self.client.force_login(staff_user)
+		respuesta = self.client.post(
+			reverse("panel_admin:usuario_eliminar", args=[usuario.pk]),
+			{"confirmacion": usuario.username},
+		)
+		self.assertEqual(respuesta.status_code, 403)
+		self.assertTrue(get_user_model().objects.filter(pk=usuario.pk).exists())
+
+	def test_panel_admin_muestra_rutinas_bloquea_y_luego_elimina_ejercicio(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="test-password",
+		)
+		ejercicio = Ejercicio.objects.create(
+			nombre="Press banca", grupo_muscular="Pecho"
+		)
+		rutinas = [
+			Entrenamiento.objects.create(nombre=nombre)
+			for nombre in ("Pecho A", "Pecho B")
+		]
+		entradas = [
+			EntrenamientoEjercicio.objects.create(
+				entrenamiento=rutina, ejercicio=ejercicio, orden=1
+			)
+			for rutina in rutinas
+		]
+		self.client.force_login(admin_user)
+
+		respuesta = self.client.post(
+			reverse("panel_admin:ejercicio_eliminar", args=[ejercicio.pk])
+		)
+		self.assertRedirects(
+			respuesta, reverse("panel_admin:ejercicio_editar", args=[ejercicio.pk])
+		)
+		self.assertTrue(Ejercicio.objects.filter(pk=ejercicio.pk).exists())
+		respuesta = self.client.get(
+			reverse("panel_admin:ejercicio_editar", args=[ejercicio.pk])
+		)
+		for rutina in rutinas:
+			self.assertContains(respuesta, rutina.nombre)
+			self.assertContains(
+				respuesta,
+				reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk]),
+			)
+
+		for rutina, entrada in zip(rutinas, entradas):
+			respuesta = self.client.post(
+				reverse(
+					"panel_admin:entrenamiento_ejercicio_eliminar",
+					args=[rutina.pk, entrada.pk],
+				)
+			)
+			self.assertEqual(respuesta.status_code, 302)
+		self.assertFalse(
+			EntrenamientoEjercicio.objects.filter(pk__in=[e.pk for e in entradas]).exists()
+		)
+
+		respuesta = self.client.post(
+			reverse("panel_admin:ejercicio_eliminar", args=[ejercicio.pk])
+		)
+		self.assertRedirects(respuesta, reverse("panel_admin:ejercicios"))
+		self.assertFalse(Ejercicio.objects.filter(pk=ejercicio.pk).exists())
+
+	def test_panel_admin_conserva_ejercicio_con_historial_al_intentar_eliminarlo(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="test-password",
+		)
+		usuario = get_user_model().objects.create_user(
+			username="usuario",
+			email="usuario@example.com",
+			password="test-password",
+		)
+		rutina = Entrenamiento.objects.create(nombre="Rutina con historial")
+		ejercicio = Ejercicio.objects.create(
+			nombre="Sentadilla", grupo_muscular="Piernas"
+		)
+		entrada = EntrenamientoEjercicio.objects.create(
+			entrenamiento=rutina, ejercicio=ejercicio, orden=1
+		)
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=usuario, entrenamiento=rutina
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion,
+			entrenamiento_ejercicio=entrada,
+		)
+		sesion = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion, fecha=timezone.now()
+		)
+		serie = Serie.objects.create(
+			sesion_entrenamiento=sesion,
+			usuario_entrenamiento_ejercicio=seleccion,
+			numero_serie=1,
+			repeticiones=8,
+			peso=Decimal("70.00"),
+		)
+		self.client.force_login(admin_user)
+
+		self.client.post(
+			reverse(
+				"panel_admin:entrenamiento_ejercicio_eliminar",
+				args=[rutina.pk, entrada.pk],
+			)
+		)
+		seleccion.refresh_from_db()
+		self.assertFalse(seleccion.activo)
+		self.assertTrue(EntrenamientoEjercicio.objects.filter(pk=entrada.pk).exists())
+
+		respuesta = self.client.post(
+			reverse("panel_admin:ejercicio_eliminar", args=[ejercicio.pk])
+		)
+		self.assertRedirects(
+			respuesta, reverse("panel_admin:ejercicio_editar", args=[ejercicio.pk])
+		)
+		self.assertTrue(Ejercicio.objects.filter(pk=ejercicio.pk).exists())
+		self.assertTrue(Serie.objects.filter(pk=serie.pk).exists())
+		self.assertContains(
+			self.client.get(
+				reverse("panel_admin:ejercicio_editar", args=[ejercicio.pk])
+			),
+			rutina.nombre,
+		)
+
 	def test_panel_admin_conecta_usuarios_rutinas_y_ejercicios(self):
 		admin_user = get_user_model().objects.create_superuser(
 			username="admin",
@@ -860,6 +1078,21 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertEqual(
 			list(sesion.series.values_list("numero_serie", flat=True)), [1]
 		)
+		self.assertContains(
+			self.client.get(
+				reverse("panel_admin:sesion_detalle", args=[sesion.pk])
+			),
+			reverse("panel_admin:sesion_eliminar", args=[sesion.pk]),
+		)
+
+		respuesta = self.client.post(
+			reverse("panel_admin:sesion_eliminar", args=[sesion.pk])
+		)
+		self.assertRedirects(respuesta, reverse("panel_admin:sesiones"))
+		self.assertFalse(SesionEntrenamiento.objects.filter(pk=sesion.pk).exists())
+		self.assertFalse(Serie.objects.filter(sesion_entrenamiento=sesion).exists())
+		self.assertTrue(Entrenamiento.objects.filter(pk=entrenamiento.pk).exists())
+		self.assertTrue(UsuarioEntrenamiento.objects.filter(pk=asignacion.pk).exists())
 
 	def test_usuario_puede_eliminar_una_serie_y_las_series_se_reenumeran(self):
 		usuario = get_user_model().objects.create_user(
