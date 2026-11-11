@@ -2,19 +2,14 @@ import logging
 from collections import defaultdict
 from datetime import timedelta
 from functools import wraps
-from pathlib import Path
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import SuspiciousFileOperation
 from django.db import transaction
 from django.db.models import Prefetch, Q
-from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils._os import safe_join
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from django.utils import timezone
@@ -42,27 +37,6 @@ from .services import (
 )
 
 logger = logging.getLogger("tracker")
-
-
-def serve_exercise_guide(_request, path):
-	content_types = {
-		".jpg": "image/jpeg",
-		".jpeg": "image/jpeg",
-		".png": "image/png",
-		".webp": "image/webp",
-	}
-	try:
-		image_path = Path(safe_join(settings.MEDIA_ROOT, "exercise_guides", path))
-	except SuspiciousFileOperation as error:
-		raise Http404 from error
-
-	content_type = content_types.get(image_path.suffix.lower())
-	if content_type is None or not image_path.is_file():
-		raise Http404
-
-	response = FileResponse(image_path.open("rb"), content_type=content_type)
-	response["X-Content-Type-Options"] = "nosniff"
-	return response
 
 
 def get_client_ip(request):
@@ -229,9 +203,7 @@ def ejercicios(request):
 		)
 		.order_by("entrenamiento__nombre")
 	)
-	ejercicios = list(
-		Ejercicio.objects.filter(activo=True).order_by("nombre")
-	)
+	ejercicios = list(Ejercicio.objects.filter(activo=True))
 	ejercicios_por_asignacion = {
 		asignacion.pk: {
 			seleccion.entrenamiento_ejercicio.ejercicio_id

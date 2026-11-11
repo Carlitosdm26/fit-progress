@@ -3,4 +3,3 @@ psycopg[binary]>=3.3,<4
 mysqlclient>=2.2,<3
 python-dotenv>=1.2,<2
 whitenoise
-Pillow>=10.4,<13

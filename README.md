@@ -12,7 +12,6 @@ Aplicación web Django para gestionar rutinas de gimnasio y registrar el progres
 - Número variable de series por ejercicio, con repeticiones y peso decimal en kilogramos.
 - Edición de ejercicios ya registrados dentro de una sesión.
 - Eliminación controlada de rutinas, sesiones o ejercicios de una sesión.
-- Guías visuales del catálogo con imagen explicativa y enlace opcional a una demostración de YouTube.
 - Cada usuario solo puede consultar y modificar sus propios datos.
 
 ## Requisitos
@@ -93,8 +92,6 @@ Antes de desplegar la migración que unifica las tablas, haz una copia de seguri
 ## Administración de rutinas y actividad
 
 En `/admin/`, el panel de operaciones permite buscar usuarios, editar el catálogo de ejercicios, las rutinas y las sesiones. La acción `Ver` abre la ficha de solo lectura de cada usuario, con sus rutinas y sus diez sesiones más recientes; la edición de cuenta queda como acción aparte. Desde una rutina se ven los usuarios asignados y se pueden abrir sus sesiones. El listado de sesiones se puede filtrar por usuario y por rutina para localizar cualquier registro. En móvil, el menú se abre con el botón de tres líneas y la barra superior incluye un acceso de vuelta a la aplicación.
-
-En la ficha administrativa de cada ejercicio se puede subir una imagen JPG, PNG o WebP de hasta 8 MB, quitarla y añadir un enlace HTTPS directo a un vídeo de YouTube. Las imágenes se guardan en `MEDIA_ROOT` (`/app/media` en la imagen Docker) y se sirven desde `/media/`. Blitz.cloud debe conservar la carpeta `/app/media` como almacenamiento persistente; la imagen Docker la declara como volumen. Antes de desplegar esta versión, haz una copia de seguridad de la base de datos y verifica que el almacenamiento de `/app/media` sea persistente. El contenedor aplica las migraciones al arrancar; en un despliegue manual, ejecuta `python manage.py migrate`. En el plan gratuito, descarga una copia de los archivos periódicamente desde la sección Files de la aplicación, ya que las carpetas persistentes no se incluyen en las copias nocturnas.
 
 Un superusuario puede eliminar una cuenta escribiendo su nombre para confirmar; esto elimina también sus rutinas, sesiones y series. No se permite eliminar la propia cuenta desde la que se administra. En el detalle de una sesión se puede eliminar la sesión completa y sus series, sin borrar la rutina. Si la rutina ya estaba marcada como eliminada y se borra su última sesión, también se limpia definitivamente al quedarse sin historial. En el catálogo se pueden eliminar ejercicios que no estén asignados a ninguna rutina y no tengan historial protegido; si un ejercicio está en rutinas, el panel muestra cuáles son y si conservan series, para saber si puede retirarse o debe mantenerse por el historial.
 

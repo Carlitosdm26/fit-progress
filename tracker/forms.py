@@ -1,7 +1,5 @@
 import logging
 from decimal import Decimal
-from pathlib import PurePath
-from urllib.parse import parse_qs, urlsplit
 
 from django import forms
 from django.contrib.auth import get_user_model
@@ -231,50 +229,17 @@ class AdminUsuarioUpdateForm(forms.ModelForm):
 
 
 class AdminEjercicioForm(forms.ModelForm):
-	def __init__(self, *args, **kwargs):
-		super().__init__(*args, **kwargs)
-		self._existing_image_name = (
-			self.instance.guia_imagen.name if self.instance.pk else ""
-		)
-
 	class Meta:
 		model = Ejercicio
-		fields = (
-			"nombre",
-			"grupo_muscular",
-			"equipamiento",
-			"descripcion",
-			"guia_imagen",
-			"video_url",
-			"activo",
-		)
+		fields = ("nombre", "grupo_muscular", "equipamiento", "descripcion", "activo")
 		labels = {
 			"nombre": "Nombre",
 			"grupo_muscular": "Grupo muscular",
 			"equipamiento": "Equipamiento",
 			"descripcion": "Descripción",
-			"guia_imagen": "Imagen explicativa",
-			"video_url": "Vídeo de YouTube",
 			"activo": "Disponible para nuevas rutinas",
 		}
-		help_texts = {
-			"guia_imagen": (
-				"JPG, PNG o WebP; máximo 8 MB. Puedes quitar la imagen actual "
-				"desde la casilla del campo."
-			),
-			"video_url": (
-				"Enlace HTTPS directo a un vídeo, Short o transmisión de YouTube."
-			),
-		}
-		widgets = {
-			"descripcion": forms.Textarea(attrs={"rows": 3}),
-			"guia_imagen": forms.ClearableFileInput(
-				attrs={"accept": "image/jpeg,image/png,image/webp"}
-			),
-			"video_url": forms.URLInput(
-				attrs={"placeholder": "https://youtu.be/..."}
-			),
-		}
+		widgets = {"descripcion": forms.Textarea(attrs={"rows": 3})}
 
 	def clean_nombre(self):
 		nombre = self.cleaned_data["nombre"].strip()
@@ -282,86 +247,6 @@ class AdminEjercicioForm(forms.ModelForm):
 		if duplicates.exists():
 			raise forms.ValidationError("Ya existe un ejercicio con ese nombre.")
 		return nombre
-
-	def save(self, commit=True):
-		ejercicio = super().save(commit=commit)
-		if (
-			commit
-			and self._existing_image_name
-			and self._existing_image_name != ejercicio.guia_imagen.name
-		):
-			ejercicio.guia_imagen.storage.delete(self._existing_image_name)
-		return ejercicio
-
-	def clean_guia_imagen(self):
-		image = self.cleaned_data.get("guia_imagen")
-		if image and not getattr(image, "_committed", False):
-			image_format = getattr(getattr(image, "image", None), "format", None)
-			allowed_extensions = {
-				"JPEG": {".jpg", ".jpeg"},
-				"PNG": {".png"},
-				"WEBP": {".webp"},
-			}
-			extension = PurePath(image.name).suffix.lower()
-			if extension not in allowed_extensions.get(image_format, set()):
-				raise forms.ValidationError(
-					"La extensión del archivo debe coincidir con una imagen JPG, PNG o WebP."
-				)
-		if image and image.size > 8 * 1024 * 1024:
-			raise forms.ValidationError("La imagen no puede superar los 8 MB.")
-		return image
-
-	def clean_video_url(self):
-		video_url = self.cleaned_data.get("video_url", "").strip()
-		if not video_url:
-			return ""
-
-		try:
-			parsed_url = urlsplit(video_url)
-			hostname = parsed_url.hostname
-			has_port = parsed_url.port is not None
-		except ValueError as error:
-			raise forms.ValidationError(
-				"Introduce un enlace HTTPS directo a un vídeo de YouTube."
-			) from error
-
-		youtube_hosts = {
-			"youtube.com",
-			"www.youtube.com",
-			"m.youtube.com",
-			"music.youtube.com",
-			"youtu.be",
-		}
-		if (
-			parsed_url.scheme != "https"
-			or hostname not in youtube_hosts
-			or parsed_url.username
-			or parsed_url.password
-			or has_port
-		):
-			raise forms.ValidationError(
-				"Introduce un enlace HTTPS directo a un vídeo de YouTube."
-			)
-
-		path_parts = [part for part in parsed_url.path.split("/") if part]
-		if hostname == "youtu.be":
-			video_id = path_parts[0] if path_parts else ""
-		elif path_parts and path_parts[0] == "watch":
-			video_id = parse_qs(parsed_url.query).get("v", [""])[0]
-		elif len(path_parts) > 1 and path_parts[0] in {
-			"embed",
-			"live",
-			"shorts",
-		}:
-			video_id = path_parts[1]
-		else:
-			video_id = ""
-
-		if not video_id:
-			raise forms.ValidationError(
-				"El enlace debe apuntar directamente a un vídeo de YouTube."
-			)
-		return video_url
 
 
 class AdminEntrenamientoForm(forms.ModelForm):

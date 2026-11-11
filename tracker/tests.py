@@ -1,5 +1,3 @@
-from io import BytesIO
-from tempfile import TemporaryDirectory
 from datetime import datetime
 from decimal import Decimal
 
@@ -7,13 +5,11 @@ from django.db import IntegrityError, connection
 from django.db.migrations.executor import MigrationExecutor
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models.deletion import ProtectedError
-from django.test import TestCase, TransactionTestCase, override_settings
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from PIL import Image
 
 from .models import (
 	Ejercicio,
@@ -121,159 +117,6 @@ class SeguimientoModelTests(TestCase):
 
 
 class AutenticacionYRutinasTests(TestCase):
-	def test_admin_puede_subir_y_quitar_imagen_y_enlace_de_ejercicio(self):
-		admin_user = get_user_model().objects.create_superuser(
-			username="admin",
-			email="admin@example.com",
-			password="test-password",
-		)
-		ejercicio = Ejercicio.objects.create(
-			nombre="Sentadilla", grupo_muscular="Piernas"
-		)
-		self.client.force_login(admin_user)
-		buffer = BytesIO()
-		Image.new("RGB", (4, 4), "white").save(buffer, format="PNG")
-
-		with TemporaryDirectory() as media_root:
-			with override_settings(MEDIA_ROOT=media_root):
-				respuesta = self.client.post(
-					reverse("panel_admin:ejercicio_editar", args=[ejercicio.pk]),
-					{
-						"nombre": ejercicio.nombre,
-						"grupo_muscular": ejercicio.grupo_muscular,
-						"equipamiento": "",
-						"descripcion": "Mantén el tronco firme.",
-						"video_url": "",
-						"activo": "on",
-						"guia_imagen": SimpleUploadedFile(
-							"sentadilla.jpg",
-							buffer.getvalue(),
-							content_type="image/png",
-						),
-					},
-				)
-				self.assertEqual(respuesta.status_code, 200)
-				self.assertIn(
-					"La extensión del archivo debe coincidir",
-					str(respuesta.context["form"].errors),
-				)
-
-				respuesta = self.client.post(
-					reverse("panel_admin:ejercicio_editar", args=[ejercicio.pk]),
-					{
-						"nombre": ejercicio.nombre,
-						"grupo_muscular": ejercicio.grupo_muscular,
-						"equipamiento": "",
-						"descripcion": "Mantén el tronco firme.",
-						"video_url": "https://youtu.be/sentadilla123",
-						"activo": "on",
-						"guia_imagen": SimpleUploadedFile(
-							"sentadilla.png",
-							buffer.getvalue(),
-							content_type="image/png",
-						),
-					},
-				)
-				self.assertRedirects(
-					respuesta, reverse("panel_admin:ejercicios")
-				)
-				ejercicio.refresh_from_db()
-				image_name = ejercicio.guia_imagen.name
-				self.assertTrue(ejercicio.guia_imagen.name.startswith("exercise_guides/"))
-				self.assertTrue(ejercicio.guia_imagen.storage.exists(
-					ejercicio.guia_imagen.name
-				))
-				self.assertEqual(
-					ejercicio.video_url, "https://youtu.be/sentadilla123"
-				)
-				respuesta_imagen = self.client.get(f"/media/{image_name}")
-				self.assertEqual(respuesta_imagen.status_code, 200)
-				self.assertEqual(respuesta_imagen["Content-Type"], "image/png")
-				respuesta_imagen.close()
-
-				respuesta = self.client.post(
-					reverse("panel_admin:ejercicio_editar", args=[ejercicio.pk]),
-					{
-						"nombre": ejercicio.nombre,
-						"grupo_muscular": ejercicio.grupo_muscular,
-						"equipamiento": "",
-						"descripcion": "Mantén el tronco firme.",
-						"video_url": "https://youtube.com.ejemplo.invalid/watch?v=falso",
-						"activo": "on",
-						"guia_imagen-clear": "on",
-					},
-				)
-				self.assertEqual(respuesta.status_code, 200)
-				self.assertContains(respuesta, "enlace HTTPS directo")
-				ejercicio.refresh_from_db()
-				self.assertTrue(ejercicio.guia_imagen)
-				self.assertTrue(ejercicio.guia_imagen.storage.exists(
-					ejercicio.guia_imagen.name
-				))
-
-				respuesta = self.client.post(
-					reverse("panel_admin:ejercicio_editar", args=[ejercicio.pk]),
-					{
-						"nombre": ejercicio.nombre,
-						"grupo_muscular": ejercicio.grupo_muscular,
-						"equipamiento": "",
-						"descripcion": "Mantén el tronco firme.",
-						"video_url": "",
-						"activo": "on",
-						"guia_imagen-clear": "on",
-					},
-				)
-				self.assertRedirects(
-					respuesta, reverse("panel_admin:ejercicios")
-				)
-				ejercicio.refresh_from_db()
-				self.assertFalse(ejercicio.guia_imagen)
-				self.assertEqual(ejercicio.video_url, "")
-				self.assertFalse(
-					ejercicio.guia_imagen.storage.exists(image_name)
-				)
-
-	def test_catalogo_muestra_guia_accesible_y_enlace_seguro_de_video(self):
-		usuario = get_user_model().objects.create_user(
-			username="cliente",
-			email="cliente@example.com",
-			password="test-password",
-		)
-		ejercicio = Ejercicio.objects.create(
-			nombre="Sentadilla",
-			grupo_muscular="Piernas",
-			descripcion="Baja con control.",
-			guia_imagen="exercise_guides/sentadilla.png",
-			video_url="https://youtu.be/sentadilla123",
-		)
-		self.client.force_login(usuario)
-
-		respuesta = self.client.get(reverse("ejercicios"))
-
-		self.assertContains(
-			respuesta,
-			f'alt="Guía visual de {ejercicio.nombre}"',
-		)
-		self.assertContains(
-			respuesta,
-			'href="https://youtu.be/sentadilla123" target="_blank" rel="noopener noreferrer"',
-		)
-		self.assertContains(respuesta, "Baja con control.")
-
-	def test_catalogo_sin_guia_no_muestra_imagen_o_enlace_vacio(self):
-		usuario = get_user_model().objects.create_user(
-			username="cliente-sin-guia",
-			email="cliente-sin-guia@example.com",
-			password="test-password",
-		)
-		Ejercicio.objects.create(nombre="Peso muerto", grupo_muscular="Espalda")
-		self.client.force_login(usuario)
-
-		respuesta = self.client.get(reverse("ejercicios"))
-
-		self.assertNotContains(respuesta, "<img")
-		self.assertNotContains(respuesta, "Ver demostración en YouTube")
-
 	def test_admin_puede_abrir_edicion_de_usuario(self):
 		admin_user = get_user_model().objects.create_superuser(
 			username="admin",

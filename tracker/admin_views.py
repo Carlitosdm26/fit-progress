@@ -241,7 +241,7 @@ def ejercicios(request):
 @staff_required
 @require_http_methods(["GET", "POST"])
 def ejercicio_nuevo(request):
-	form = AdminEjercicioForm(request.POST or None, request.FILES or None)
+	form = AdminEjercicioForm(request.POST or None)
 	if request.method == "POST" and form.is_valid():
 		ejercicio = form.save()
 		messages.success(request, f"El ejercicio {ejercicio.nombre} se creó.")
@@ -253,11 +253,7 @@ def ejercicio_nuevo(request):
 @require_http_methods(["GET", "POST"])
 def ejercicio_editar(request, ejercicio_id):
 	ejercicio = get_object_or_404(Ejercicio, pk=ejercicio_id)
-	form = AdminEjercicioForm(
-		request.POST or None,
-		request.FILES or None,
-		instance=ejercicio,
-	)
+	form = AdminEjercicioForm(request.POST or None, instance=ejercicio)
 	if request.method == "POST" and form.is_valid():
 		form.save()
 		messages.success(request, f"El ejercicio {ejercicio.nombre} se actualizó.")
@@ -290,8 +286,6 @@ def ejercicio_editar(request, ejercicio_id):
 @require_http_methods(["POST"])
 def ejercicio_eliminar(request, ejercicio_id):
 	ejercicio = get_object_or_404(Ejercicio, pk=ejercicio_id)
-	imagen_storage = ejercicio.guia_imagen.storage
-	imagen_name = ejercicio.guia_imagen.name
 	try:
 		with transaction.atomic():
 			rutinas = list(
@@ -320,8 +314,6 @@ def ejercicio_eliminar(request, ejercicio_id):
 		)
 		return redirect("panel_admin:ejercicio_editar", ejercicio_id=ejercicio.pk)
 
-	if imagen_name:
-		imagen_storage.delete(imagen_name)
 	messages.success(request, f"Se eliminó el ejercicio {ejercicio.nombre}.")
 	return redirect("panel_admin:ejercicios")
 
