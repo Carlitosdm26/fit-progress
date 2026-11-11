@@ -17,12 +17,21 @@
 {% if ejercicio %}
 <section class="form-section" style="margin-top: 24px">
     <h2>Rutinas que usan este ejercicio</h2>
+    <p class="help">Si tiene series registradas, el ejercicio debe conservarse para mantener el historial. Si no tiene series, quítalo de la rutina y vuelve aquí para eliminarlo.</p>
     {% for entrada in rutinas_asignadas %}
-    <div class="relation-line"><div><a class="row-link" href="{% url 'panel_admin:entrenamiento_detalle' entrada.entrenamiento_id %}">{{ entrada.entrenamiento.nombre }}</a><div class="help">{{ entrada.usuario_nombre|default:"Sin propietario activo" }}{% if entrada.entrenamiento.eliminada %} · Rutina eliminada{% endif %}</div></div></div>
+    <div class="relation-line"><div><a class="row-link" href="{% url 'panel_admin:entrenamiento_detalle' entrada.entrenamiento_id %}">{{ entrada.entrenamiento.nombre }}</a><div class="help">{{ entrada.usuario_nombre|default:"Sin propietario activo" }}{% if entrada.entrenamiento.eliminada %} · Rutina eliminada{% endif %}</div>
+        {% if entrada.series_count %}
+        <div class="help">{% if entrada.series_count == 1 %}1 serie guardada{% else %}{{ entrada.series_count }} series guardadas{% endif %}: conserva este ejercicio para no perder la referencia del historial.</div>
+        {% elif entrada.entrenamiento.eliminada %}
+        <div class="help">Rutina eliminada: no se puede modificar. Al eliminar sus sesiones, la rutina se limpiará automáticamente si ya no queda historial.</div>
+        {% else %}
+        <div class="help">Sin series guardadas: puedes quitarlo de la rutina y volver a intentar eliminarlo.</div>
+        {% endif %}
+    </div></div>
     {% empty %}<p class="help">Este ejercicio no está asignado a ninguna rutina.</p>{% endfor %}
     <form method="post" action="{% url 'panel_admin:ejercicio_eliminar' ejercicio.pk %}" onsubmit="return confirm('¿Eliminar este ejercicio? Solo se borrará si ya no está en rutinas ni tiene historial protegido.');">
         {% csrf_token %}
-        <button class="button" type="submit">Eliminar ejercicio del catálogo</button>
+        <button class="button danger" type="submit">Eliminar ejercicio del catálogo</button>
     </form>
 </section>
 {% endif %}

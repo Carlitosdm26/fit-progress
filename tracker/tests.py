@@ -356,6 +356,7 @@ class AutenticacionYRutinasTests(TestCase):
 		)
 		self.assertContains(respuesta, "Eliminar cuenta y todos sus datos")
 		self.assertContains(respuesta, "rutinas (1), sesiones (1) y series (1)")
+		self.assertContains(respuesta, 'class="button danger"')
 
 		respuesta = self.client.post(
 			reverse("panel_admin:usuario_eliminar", args=[usuario.pk]),
@@ -449,10 +450,12 @@ class AutenticacionYRutinasTests(TestCase):
 		)
 		for rutina in rutinas:
 			self.assertContains(respuesta, rutina.nombre)
+			self.assertContains(respuesta, "Sin series guardadas")
 			self.assertContains(
 				respuesta,
 				reverse("panel_admin:entrenamiento_detalle", args=[rutina.pk]),
 			)
+		self.assertContains(respuesta, 'class="button danger"')
 
 		for rutina, entrada in zip(rutinas, entradas):
 			respuesta = self.client.post(
@@ -527,12 +530,12 @@ class AutenticacionYRutinasTests(TestCase):
 		)
 		self.assertTrue(Ejercicio.objects.filter(pk=ejercicio.pk).exists())
 		self.assertTrue(Serie.objects.filter(pk=serie.pk).exists())
-		self.assertContains(
-			self.client.get(
-				reverse("panel_admin:ejercicio_editar", args=[ejercicio.pk])
-			),
-			rutina.nombre,
+		respuesta = self.client.get(
+			reverse("panel_admin:ejercicio_editar", args=[ejercicio.pk])
 		)
+		self.assertContains(respuesta, rutina.nombre)
+		self.assertContains(respuesta, "1 serie guardada")
+		self.assertNotContains(respuesta, "Sin series guardadas")
 
 	def test_panel_admin_conecta_usuarios_rutinas_y_ejercicios(self):
 		admin_user = get_user_model().objects.create_superuser(
@@ -1084,6 +1087,12 @@ class AutenticacionYRutinasTests(TestCase):
 			),
 			reverse("panel_admin:sesion_eliminar", args=[sesion.pk]),
 		)
+		self.assertContains(
+			self.client.get(
+				reverse("panel_admin:sesion_detalle", args=[sesion.pk])
+			),
+			'class="button danger"',
+		)
 
 		respuesta = self.client.post(
 			reverse("panel_admin:sesion_eliminar", args=[sesion.pk])
@@ -1093,6 +1102,63 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertFalse(Serie.objects.filter(sesion_entrenamiento=sesion).exists())
 		self.assertTrue(Entrenamiento.objects.filter(pk=entrenamiento.pk).exists())
 		self.assertTrue(UsuarioEntrenamiento.objects.filter(pk=asignacion.pk).exists())
+
+	def test_panel_admin_al_eliminar_ultima_sesion_purga_rutina_ya_eliminada(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="test-password",
+		)
+		usuario = get_user_model().objects.create_user(
+			username="usuario",
+			email="usuario@example.com",
+			password="test-password",
+		)
+		entrenamiento = Entrenamiento.objects.create(
+			nombre="Rutina previamente eliminada",
+			eliminada=True,
+		)
+		ejercicio = Ejercicio.objects.create(
+			nombre="Remo", grupo_muscular="Espalda"
+		)
+		entrada = EntrenamientoEjercicio.objects.create(
+			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
+		)
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=usuario,
+			entrenamiento=entrenamiento,
+			activa=False,
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion,
+			entrenamiento_ejercicio=entrada,
+		)
+		sesion = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion,
+			fecha=timezone.now(),
+		)
+		serie = Serie.objects.create(
+			sesion_entrenamiento=sesion,
+			usuario_entrenamiento_ejercicio=seleccion,
+			numero_serie=1,
+			repeticiones=10,
+			peso=Decimal("35.00"),
+		)
+		self.client.force_login(admin_user)
+
+		respuesta = self.client.post(
+			reverse("panel_admin:sesion_eliminar", args=[sesion.pk]),
+			follow=True,
+		)
+
+		self.assertContains(respuesta, "también se limpió esa rutina sin historial")
+		self.assertFalse(SesionEntrenamiento.objects.filter(pk=sesion.pk).exists())
+		self.assertFalse(Serie.objects.filter(pk=serie.pk).exists())
+		self.assertFalse(UsuarioEntrenamiento.objects.filter(pk=asignacion.pk).exists())
+		self.assertFalse(UsuarioEntrenamientoEjercicio.objects.filter(pk=seleccion.pk).exists())
+		self.assertFalse(EntrenamientoEjercicio.objects.filter(pk=entrada.pk).exists())
+		self.assertFalse(Entrenamiento.objects.filter(pk=entrenamiento.pk).exists())
+		self.assertTrue(Ejercicio.objects.filter(pk=ejercicio.pk).exists())
 
 	def test_usuario_puede_eliminar_una_serie_y_las_series_se_reenumeran(self):
 		usuario = get_user_model().objects.create_user(
