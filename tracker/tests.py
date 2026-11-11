@@ -381,6 +381,50 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertFalse(Serie.objects.filter(pk=serie.pk).exists())
 		self.assertTrue(Ejercicio.objects.filter(pk=ejercicio.pk).exists())
 
+	def test_panel_admin_elimina_usuario_con_rutina_sin_sesiones(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="test-password",
+		)
+		usuario = get_user_model().objects.create_user(
+			username="cuenta-sin-actividad",
+			email="sin-actividad@example.com",
+			password="test-password",
+		)
+		entrenamiento = Entrenamiento.objects.create(nombre="Rutina sin sesiones")
+		ejercicio = Ejercicio.objects.create(
+			nombre="Peso muerto", grupo_muscular="Espalda"
+		)
+		entrada = EntrenamientoEjercicio.objects.create(
+			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
+		)
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=usuario, entrenamiento=entrenamiento
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion,
+			entrenamiento_ejercicio=entrada,
+		)
+		self.client.force_login(admin_user)
+
+		respuesta = self.client.post(
+			reverse("panel_admin:usuario_eliminar", args=[usuario.pk]),
+			{"confirmacion": usuario.username},
+		)
+
+		self.assertRedirects(respuesta, reverse("panel_admin:usuarios"))
+		self.assertFalse(get_user_model().objects.filter(pk=usuario.pk).exists())
+		self.assertFalse(Entrenamiento.objects.filter(pk=entrenamiento.pk).exists())
+		self.assertFalse(EntrenamientoEjercicio.objects.filter(pk=entrada.pk).exists())
+		self.assertFalse(
+			UsuarioEntrenamiento.objects.filter(pk=asignacion.pk).exists()
+		)
+		self.assertFalse(
+			UsuarioEntrenamientoEjercicio.objects.filter(pk=seleccion.pk).exists()
+		)
+		self.assertTrue(Ejercicio.objects.filter(pk=ejercicio.pk).exists())
+
 	def test_panel_admin_impide_eliminarse_a_si_mismo_y_restringe_a_superusuarios(self):
 		admin_user = get_user_model().objects.create_superuser(
 			username="admin",
@@ -731,6 +775,79 @@ class AutenticacionYRutinasTests(TestCase):
 			respuesta,
 			f'href="{reverse("panel_admin:usuario_detalle", args=[usuario_origen.pk])}">origen</a>',
 		)
+
+	def test_panel_admin_filtra_y_ordena_rutinas_preservando_parametros(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="test-password",
+		)
+		usuario = get_user_model().objects.create_user(
+			username="alicia",
+			email="alicia@example.com",
+			password="test-password",
+		)
+		otro_usuario = get_user_model().objects.create_user(
+			username="bruno",
+			email="bruno@example.com",
+			password="test-password",
+		)
+		rutinas = [
+			Entrenamiento.objects.create(nombre=nombre)
+			for nombre in ("Zeta", "Alpha", "Beta", "Gamma")
+		]
+		UsuarioEntrenamiento.objects.create(
+			usuario=usuario, entrenamiento=rutinas[0]
+		)
+		UsuarioEntrenamiento.objects.create(
+			usuario=usuario, entrenamiento=rutinas[1], activa=False
+		)
+		UsuarioEntrenamiento.objects.create(
+			usuario=otro_usuario, entrenamiento=rutinas[2]
+		)
+		self.client.force_login(admin_user)
+
+		respuesta = self.client.get(
+			reverse("panel_admin:entrenamientos"),
+			{"usuario": usuario.pk},
+		)
+		self.assertEqual(
+			respuesta.context["page_obj"].paginator.count,
+			2,
+		)
+		self.assertContains(respuesta, "Zeta")
+		self.assertContains(respuesta, "Alpha")
+		self.assertContains(respuesta, "Desasignada")
+		self.assertNotContains(respuesta, "Beta")
+
+		respuesta = self.client.get(
+			reverse("panel_admin:entrenamientos"),
+			{"usuario": "sin_asignar"},
+		)
+		self.assertEqual(
+			[item.nombre for item in respuesta.context["page_obj"]],
+			["Gamma"],
+		)
+
+		respuesta = self.client.get(
+			reverse("panel_admin:entrenamientos"),
+			{"orden": "nombre", "direccion": "desc"},
+		)
+		self.assertEqual(
+			[item.nombre for item in respuesta.context["page_obj"]],
+			["Zeta", "Gamma", "Beta", "Alpha"],
+		)
+
+		respuesta = self.client.get(
+			reverse("panel_admin:entrenamientos"),
+			{"q": "a", "usuario": usuario.pk},
+		)
+		self.assertContains(
+			respuesta,
+			f'href="?q=a&amp;usuario={usuario.pk}&amp;orden=nombre&amp;direccion=desc"',
+		)
+		self.assertContains(respuesta, 'name="orden" value="nombre"')
+		self.assertContains(respuesta, 'name="direccion" value="asc"')
 
 	def test_panel_admin_lista_propietario_y_solo_usuarios_asignados_activos(self):
 		admin_user = get_user_model().objects.create_superuser(
