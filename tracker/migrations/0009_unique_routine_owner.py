@@ -26,7 +26,6 @@ def split_shared_routines(apps, schema_editor):
 			.filter(entrenamiento_id=routine_id)
 			.order_by("pk")
 		)
-		source_id = routine.rutina_origen_id or routine.pk
 		source_entries = list(
 			EntrenamientoEjercicio.objects.using(db_alias)
 			.filter(entrenamiento_id=routine_id)
@@ -35,9 +34,8 @@ def split_shared_routines(apps, schema_editor):
 
 		for assignment in assignments[1:]:
 			copy = Entrenamiento.objects.using(db_alias).create(
-				nombre=routine.nombre,
+				nombre=f"{routine.nombre} (copia)",
 				descripcion=routine.descripcion,
-				rutina_origen_id=source_id,
 			)
 			entries_by_id = {}
 			entries_by_exercise = {}

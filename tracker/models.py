@@ -96,13 +96,6 @@ class Entrenamiento(models.Model):
 	descripcion = models.TextField(blank=True)
 	fecha_creacion = models.DateTimeField(auto_now_add=True)
 	eliminada = models.BooleanField(default=False)
-	rutina_origen = models.ForeignKey(
-		"self",
-		on_delete=models.PROTECT,
-		null=True,
-		blank=True,
-		related_name="copias",
-	)
 
 	class Meta:
 		ordering = ["nombre"]

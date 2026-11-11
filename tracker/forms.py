@@ -258,6 +258,12 @@ class AdminEntrenamientoForm(forms.ModelForm):
 
 
 class AdminAsignacionForm(forms.ModelForm):
+	nombre_copia = forms.CharField(
+		max_length=120,
+		required=False,
+		label="Nombre de la copia",
+	)
+
 	class Meta:
 		model = UsuarioEntrenamiento
 		fields = ("usuario", "entrenamiento")
@@ -266,18 +272,20 @@ class AdminAsignacionForm(forms.ModelForm):
 	def __init__(self, *args, entrenamiento=None, **kwargs):
 		super().__init__(*args, **kwargs)
 		if entrenamiento is not None:
+			self.entrenamiento = entrenamiento
 			self.instance.entrenamiento = entrenamiento
 			self.fields.pop("entrenamiento")
 			self.fields["usuario"].queryset = self.fields["usuario"].queryset.filter(is_active=True)
+			self.fields["nombre_copia"].initial = f"{entrenamiento.nombre} (copia)"
 
 	def clean(self):
 		cleaned_data = super().clean()
-		usuario = cleaned_data.get("usuario")
 		entrenamiento = cleaned_data.get("entrenamiento") or self.instance.entrenamiento
-		if usuario and entrenamiento and UsuarioEntrenamiento.objects.filter(
-			usuario=usuario, entrenamiento=entrenamiento, activa=True
-		).exclude(pk=self.instance.pk).exists():
-			self.add_error("usuario", "Este usuario ya tiene asignada esta rutina.")
+		nombre_copia = cleaned_data.get("nombre_copia")
+		if not nombre_copia and entrenamiento:
+			nombre_copia = f"{entrenamiento.nombre} (copia)"
+		if nombre_copia:
+			cleaned_data["nombre_copia"] = nombre_copia.strip()
 		return cleaned_data
 
 

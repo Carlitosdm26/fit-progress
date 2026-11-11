@@ -4,14 +4,41 @@ from .models import (
 	Entrenamiento,
 	EntrenamientoEjercicio,
 	Serie,
+	SesionEntrenamiento,
 	UsuarioEntrenamiento,
 	UsuarioEntrenamientoEjercicio,
 )
 
 
 @transaction.atomic
-def copiar_rutina_para_usuario(rutina, usuario):
-	rutina_origen = rutina.rutina_origen or rutina
+def purgar_rutina_eliminada_sin_sesiones(entrenamiento_id):
+	entrenamiento = (
+		Entrenamiento.objects.select_for_update()
+		.filter(pk=entrenamiento_id, eliminada=True)
+		.first()
+	)
+	if entrenamiento is None:
+		return False
+	if SesionEntrenamiento.objects.filter(
+		usuario_entrenamiento__entrenamiento=entrenamiento
+	).exists():
+		return False
+	if Serie.objects.filter(
+		usuario_entrenamiento_ejercicio__usuario_entrenamiento__entrenamiento=entrenamiento
+	).exists():
+		return False
+
+	UsuarioEntrenamientoEjercicio.objects.filter(
+		usuario_entrenamiento__entrenamiento=entrenamiento
+	).delete()
+	UsuarioEntrenamiento.objects.filter(entrenamiento=entrenamiento).delete()
+	EntrenamientoEjercicio.objects.filter(entrenamiento=entrenamiento).delete()
+	entrenamiento.delete()
+	return True
+
+
+@transaction.atomic
+def copiar_rutina_para_usuario(rutina, usuario, nombre=None):
 	asignacion_origen = UsuarioEntrenamiento.objects.filter(
 		entrenamiento=rutina,
 		activa=True,
@@ -24,9 +51,8 @@ def copiar_rutina_para_usuario(rutina, usuario):
 		)
 
 	entrenamiento = Entrenamiento.objects.create(
-		nombre=rutina.nombre,
+		nombre=nombre or f"{rutina.nombre} (copia)",
 		descripcion=rutina.descripcion,
-		rutina_origen=rutina_origen,
 	)
 	asignacion = UsuarioEntrenamiento.objects.create(
 		usuario=usuario,
