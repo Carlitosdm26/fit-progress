@@ -2,7 +2,13 @@
 {% block title %}{{ titulo }} | Administración{% endblock %}
 {% block content %}
 <div class="heading"><div><div class="eyebrow">Gestión de actividad</div><h1>{{ titulo }}</h1></div><a class="button secondary" href="{{ volver }}">Volver</a></div>
-<form class="form-section" method="post" novalidate>{% csrf_token %}{{ form.non_field_errors }}
+<form class="form-section" method="post" enctype="multipart/form-data" novalidate>{% csrf_token %}{{ form.non_field_errors }}
+    {% if ejercicio.guia_imagen %}
+    <div class="guide-preview">
+        <img src="{{ ejercicio.guia_imagen.url }}" alt="Imagen actual de guía para {{ ejercicio.nombre }}">
+        <p class="help">Vista previa de la imagen que verá el cliente.</p>
+    </div>
+    {% endif %}
     <div class="form-fields">
         {% for field in form %}
             {% if field.field.widget.input_type == "checkbox" %}

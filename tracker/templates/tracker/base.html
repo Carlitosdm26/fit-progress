@@ -115,6 +115,13 @@
         .exercise-toggle { display: grid; flex: 0 0 28px; place-items: center; width: 28px; height: 28px; margin-left: auto; border: 1px solid var(--line); color: var(--green-dark); }
         .exercise-toggle::before { content: "+"; font: 700 1.2rem "DM Sans", sans-serif; }
         .exercise-picker[open] .exercise-toggle::before { content: "−"; }
+        .exercise-guide { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 14px; align-items: start; margin: 0 0 14px 46px; }
+        .exercise-guide-image { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #e8eee4; }
+        .exercise-guide-copy { padding: 14px; border-left: 3px solid var(--green); background: #f3f6f0; }
+        .exercise-guide-copy h3 { margin: 0 0 7px; font-size: 1.05rem; }
+        .exercise-guide-copy p { margin: 0 0 10px; color: var(--muted); font-size: .84rem; line-height: 1.5; }
+        .exercise-video-link { color: var(--green-dark); font-size: .84rem; font-weight: 700; text-underline-offset: 3px; }
+        .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
         .exercise-add-panel { margin: 0 0 14px 46px; padding: 14px; border-left: 3px solid var(--green); background: #f3f6f0; }
         .exercise-add-panel form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px 12px; }
         .exercise-add-panel label { grid-column: 1 / -1; margin: 0; }
@@ -152,6 +159,7 @@
             .stat { min-height: auto; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
             .stat span { margin-top: 0; text-align: right; }
             .exercise-list { grid-template-columns: 1fr; }
+            .exercise-guide { grid-template-columns: 1fr; margin-left: 0; }
             .exercise-add-panel { margin-left: 0; }
             .exercise-add-panel form { grid-template-columns: 1fr; }
             .exercise-add-panel label { grid-column: auto; }

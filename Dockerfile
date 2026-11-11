@@ -6,6 +6,8 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+VOLUME ["/app/media"]
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     default-libmysqlclient-dev build-essential pkg-config \
     && rm -rf /var/lib/apt/lists/*

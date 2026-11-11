@@ -158,6 +158,16 @@ class Ejercicio(models.Model):
 	descripcion = models.TextField(blank=True)
 	equipamiento = models.CharField(max_length=120, blank=True)
 	grupo_muscular = models.CharField(max_length=80)
+	guia_imagen = models.ImageField(
+		upload_to="exercise_guides/",
+		blank=True,
+		verbose_name="Imagen de guía",
+	)
+	video_url = models.URLField(
+		max_length=500,
+		blank=True,
+		verbose_name="Enlace de YouTube",
+	)
 	activo = models.BooleanField(default=True)
 
 	class Meta:
