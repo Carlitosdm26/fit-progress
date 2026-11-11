@@ -10,6 +10,7 @@ from django.db.models.deletion import ProtectedError
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.http import urlencode
 from django.views.decorators.http import require_http_methods
 
 from .forms import (
@@ -320,19 +321,78 @@ def ejercicio_eliminar(request, ejercicio_id):
 @staff_required
 def entrenamientos(request):
 	query = request.GET.get("q", "").strip()
+	usuario_id = request.GET.get("usuario", "")
+	orden = request.GET.get("orden", "nombre")
+	direccion = request.GET.get("direccion", "asc")
+	campos_ordenables = {
+		"nombre": "nombre",
+		"usuario": "usuario_nombre",
+		"ejercicios": "ejercicios_count",
+		"creada": "fecha_creacion",
+	}
+	if orden not in campos_ordenables:
+		orden = "nombre"
+	if direccion not in {"asc", "desc"}:
+		direccion = "asc"
+
 	queryset = Entrenamiento.objects.filter(eliminada=False).annotate(
-		usuario_nombre=Min(
-			"usuarios__usuario__username",
-			filter=Q(usuarios__activa=True),
+		usuario_nombre=Min("usuarios__usuario__username"),
+		usuario_activo_nombre=Min(
+			"usuarios__usuario__username", filter=Q(usuarios__activa=True)
 		),
 		ejercicios_count=Count("ejercicios", distinct=True),
-	).order_by("nombre", "pk")
+	)
 	if query:
 		queryset = queryset.filter(Q(nombre__icontains=query) | Q(descripcion__icontains=query))
+	if usuario_id == "sin_asignar":
+		queryset = queryset.filter(usuarios__isnull=True)
+	elif usuario_id.isdigit():
+		queryset = queryset.filter(usuarios__usuario_id=int(usuario_id))
+
+	campo_orden = campos_ordenables[orden]
+	queryset = queryset.order_by(
+		f"{'-' if direccion == 'desc' else ''}{campo_orden}",
+		"nombre",
+		"pk",
+	)
+	columnas_ordenables = []
+	for key, label in (
+		("nombre", "Rutina"),
+		("usuario", "Usuario"),
+		("ejercicios", "Ejercicios"),
+		("creada", "Creada"),
+	):
+		next_direction = (
+			"desc" if orden == key and direccion == "asc" else "asc"
+		)
+		query_params = {
+			"q": query,
+			"usuario": usuario_id,
+			"orden": key,
+			"direccion": next_direction,
+		}
+		columnas_ordenables.append(
+			{
+				"key": key,
+				"label": label,
+				"active": orden == key,
+				"direccion": direccion,
+				"url": f"?{urlencode(query_params)}",
+			}
+		)
+
 	return render(
 		request,
 		"tracker/admin/entrenamientos.html",
-		{"page_obj": Paginator(queryset, 30).get_page(request.GET.get("page")), "query": query},
+		{
+			"page_obj": Paginator(queryset, 30).get_page(request.GET.get("page")),
+			"query": query,
+			"usuarios": get_user_model().objects.order_by("username"),
+			"usuario_id": usuario_id,
+			"orden": orden,
+			"direccion": direccion,
+			"columnas_ordenables": columnas_ordenables,
+		},
 	)
 
 
