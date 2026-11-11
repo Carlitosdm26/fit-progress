@@ -30,5 +30,16 @@
     {% empty %}<tr><td class="empty" colspan="4">Este usuario todavía no tiene sesiones.</td></tr>{% endfor %}
     </tbody></table></div>
 </section>
+{% if puede_eliminar_usuario %}
+<section class="form-section" style="margin-top: 24px">
+    <h2>Eliminar cuenta y todos sus datos</h2>
+    <p>Esta acción permanente eliminará todos los datos de {{ usuario.username }}: rutinas ({{ rutinas_eliminar_count }}), sesiones ({{ sesiones_eliminar_count }}) y series ({{ series_eliminar_count }}).</p>
+    <form method="post" action="{% url 'panel_admin:usuario_eliminar' usuario.pk %}" onsubmit="return confirm('¿Eliminar permanentemente esta cuenta y sus rutinas, sesiones e historial? Esta acción no se puede deshacer.');">
+        {% csrf_token %}
+        <div class="field"><label for="id_confirmacion_eliminar">Escribe «{{ usuario.username }}» para confirmar</label><input id="id_confirmacion_eliminar" name="confirmacion" type="text" autocomplete="off" required></div>
+        <button class="button" type="submit">Eliminar cuenta y sus datos</button>
+    </form>
+</section>
+{% endif %}
 {% endif %}
 {% endblock %}
