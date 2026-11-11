@@ -40,16 +40,18 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
 	groups = models.ManyToManyField(
 		Group,
 		blank=True,
-		db_table="auth_user_groups",
+		through="UsuarioGrupo",
 		related_name="user_set",
 		related_query_name="user",
+		through_fields=("usuario", "group"),
 	)
 	user_permissions = models.ManyToManyField(
 		Permission,
 		blank=True,
-		db_table="auth_user_user_permissions",
+		through="UsuarioPermiso",
 		related_name="user_set",
 		related_query_name="user",
+		through_fields=("usuario", "permission"),
 	)
 	objects = UsuarioManager()
 
@@ -61,6 +63,52 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
 
 	class Meta:
 		db_table = "auth_user"
+
+
+class UsuarioGrupo(models.Model):
+	usuario = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		db_column="user_id",
+	)
+	group = models.ForeignKey(
+		Group,
+		on_delete=models.CASCADE,
+		db_column="group_id",
+	)
+
+	class Meta:
+		db_table = "auth_user_groups"
+		managed = False
+		constraints = [
+			models.UniqueConstraint(
+				fields=["usuario", "group"],
+				name="auth_user_groups_user_group_unique",
+			)
+		]
+
+
+class UsuarioPermiso(models.Model):
+	usuario = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		db_column="user_id",
+	)
+	permission = models.ForeignKey(
+		Permission,
+		on_delete=models.CASCADE,
+		db_column="permission_id",
+	)
+
+	class Meta:
+		db_table = "auth_user_user_permissions"
+		managed = False
+		constraints = [
+			models.UniqueConstraint(
+				fields=["usuario", "permission"],
+				name="auth_user_user_permissions_user_perm_unique",
+			)
+		]
 
 
 class DatoArchivado(models.Model):
