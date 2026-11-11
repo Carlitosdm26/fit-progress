@@ -270,6 +270,7 @@ def ejercicio_editar(request, ejercicio_id):
 			)
 			.select_related("entrenamiento")
 			.annotate(
+				series_count=Count("elecciones__series", distinct=True),
 				usuario_nombre=Min(
 					"entrenamiento__usuarios__usuario__username",
 					filter=Q(entrenamiento__usuarios__activa=True),
@@ -656,14 +657,24 @@ def sesion_eliminar(request, sesion_id):
 		pk=sesion_id,
 	)
 	fecha = sesion.fecha
+	entrenamiento_id = sesion.usuario_entrenamiento.entrenamiento_id
 	with transaction.atomic():
 		Serie.objects.filter(sesion_entrenamiento=sesion).delete()
 		sesion.delete()
-	messages.success(
-		request,
-		f"Se eliminó la sesión del {fecha:%d/%m/%Y} y sus series. "
-		"La rutina se conservó.",
-	)
+		rutina_purgada = purgar_rutina_eliminada_sin_sesiones(entrenamiento_id)
+	if rutina_purgada:
+		messages.success(
+			request,
+			f"Se eliminó la sesión del {fecha:%d/%m/%Y} y sus series. "
+			"Como era la última sesión de una rutina ya eliminada, también se "
+			"limpió esa rutina sin historial.",
+		)
+	else:
+		messages.success(
+			request,
+			f"Se eliminó la sesión del {fecha:%d/%m/%Y} y sus series. "
+			"La rutina se conservó.",
+		)
 	return redirect("panel_admin:sesiones")
 
 

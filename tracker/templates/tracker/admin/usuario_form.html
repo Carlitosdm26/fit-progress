@@ -37,7 +37,7 @@
     <form method="post" action="{% url 'panel_admin:usuario_eliminar' usuario.pk %}" onsubmit="return confirm('¿Eliminar permanentemente esta cuenta y sus rutinas, sesiones e historial? Esta acción no se puede deshacer.');">
         {% csrf_token %}
         <div class="field"><label for="id_confirmacion_eliminar">Escribe «{{ usuario.username }}» para confirmar</label><input id="id_confirmacion_eliminar" name="confirmacion" type="text" autocomplete="off" required></div>
-        <button class="button" type="submit">Eliminar cuenta y sus datos</button>
+        <button class="button danger" type="submit">Eliminar cuenta y sus datos</button>
     </form>
 </section>
 {% endif %}

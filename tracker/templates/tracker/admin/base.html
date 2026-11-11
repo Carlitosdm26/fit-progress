@@ -37,10 +37,17 @@
         h2 { font-size: 1.55rem; line-height: 1.05; }
         p { line-height: 1.5; }
         .heading { display: flex; justify-content: space-between; align-items: end; gap: 20px; margin-bottom: 26px; }
+        .heading .form-actions { margin-top: 0; }
         .heading p { margin: 8px 0 0; color: var(--muted); font-size: .88rem; }
         .button { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 0 15px; border: 0; background: var(--hot); color: white; font: 700 .74rem "DM Sans", sans-serif; text-decoration: none; text-transform: uppercase; cursor: pointer; }
         .button:hover { background: #bd4129; }
         .button.secondary { background: var(--ink); }
+        .button.danger { background: #a43023; }
+        .button.danger:hover { background: #7f201a; }
+        .button.danger:focus-visible { outline: 2px solid #a43023; outline-offset: 3px; }
+        .logout.danger-link { border-bottom-color: #a43023; color: #a43023; }
+        .logout.danger-link:hover { color: #7f201a; }
+        .logout.danger-link:focus-visible { outline: 2px solid #a43023; outline-offset: 3px; }
         .metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 26px 0 34px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--paper); }
         .metric { min-width: 0; padding: 18px 20px; border-right: 1px solid var(--line); }
         .metric:last-child { border-right: 0; }
