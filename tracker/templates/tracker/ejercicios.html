@@ -30,6 +30,18 @@
 						</span>
 						<span class="exercise-toggle" aria-hidden="true"></span>
 					</summary>
+					{% if ejercicio.guia_imagen or ejercicio.video_url or ejercicio.descripcion %}
+					<div class="exercise-guide">
+						{% if ejercicio.guia_imagen %}
+						<img class="exercise-guide-image" src="{{ ejercicio.guia_imagen.url }}" alt="Guía visual de {{ ejercicio.nombre }}">
+						{% endif %}
+						<div class="exercise-guide-copy">
+							<h3>Guía del ejercicio</h3>
+							{% if ejercicio.descripcion %}<p>{{ ejercicio.descripcion }}</p>{% endif %}
+							{% if ejercicio.video_url %}<a class="exercise-video-link" href="{{ ejercicio.video_url }}" target="_blank" rel="noopener noreferrer">Ver demostración en YouTube<span class="visually-hidden"> (se abre en una pestaña nueva)</span></a>{% endif %}
+						</div>
+					</div>
+					{% endif %}
 					<div class="exercise-add-panel">
 						{% if ejercicio.rutinas_disponibles %}
 						<form method="post" action="{% url 'ejercicio_anadir_a_rutina' ejercicio.pk %}">
