@@ -30,7 +30,11 @@ from .models import (
 	UsuarioEntrenamiento,
 	UsuarioEntrenamientoEjercicio,
 )
-from .services import copiar_rutina_para_usuario, eliminar_serie_y_reenumerar
+from .services import (
+	copiar_rutina_para_usuario,
+	eliminar_serie_y_reenumerar,
+	purgar_rutina_eliminada_sin_sesiones,
+)
 
 
 def staff_required(view_func):
@@ -231,6 +235,7 @@ def entrenamiento_eliminar(request, entrenamiento_id):
 		UsuarioEntrenamiento.objects.filter(entrenamiento=entrenamiento).update(
 			activa=False
 		)
+		purgar_rutina_eliminada_sin_sesiones(entrenamiento.pk)
 	messages.success(
 		request,
 		f"Se eliminó la rutina {entrenamiento.nombre}. "
@@ -264,30 +269,28 @@ def entrenamiento_detalle(request, entrenamiento_id):
 		try:
 			with transaction.atomic():
 				usuario = asignacion_form.cleaned_data["usuario"]
-				rutina_origen = entrenamiento.rutina_origen or entrenamiento
-				rutinas_relacionadas = Entrenamiento.objects.filter(
-					Q(pk=rutina_origen.pk) | Q(rutina_origen=rutina_origen)
-				)
-				asignacion = UsuarioEntrenamiento.objects.filter(
+				nombre_copia = asignacion_form.cleaned_data["nombre_copia"]
+				if UsuarioEntrenamiento.objects.filter(
 					usuario=usuario,
-					entrenamiento__in=rutinas_relacionadas,
-				).select_related("entrenamiento").order_by("-activa").first()
-				creada = asignacion is None
-				if creada:
-					asignacion = copiar_rutina_para_usuario(entrenamiento, usuario)
-				reactivada = not creada and not asignacion.activa
-				if reactivada:
-					asignacion.activa = True
-					asignacion.save(update_fields=["activa"])
-			if not creada and not reactivada:
-				messages.error(request, "Este usuario ya tiene su propia copia de esta rutina.")
-				return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
+					activa=True,
+					entrenamiento__eliminada=False,
+					entrenamiento__nombre__iexact=nombre_copia,
+				).exists():
+					messages.error(
+						request,
+						f"{usuario.username} ya tiene una rutina activa llamada "
+						f"{nombre_copia}. Elige otro nombre para la copia.",
+					)
+					return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)
+				asignacion = copiar_rutina_para_usuario(
+					entrenamiento, usuario, nombre=nombre_copia
+				)
 		except IntegrityError:
 			messages.error(request, "No se pudo crear otra copia para este usuario.")
 		else:
 			messages.success(
 				request,
-				f"Rutina {'copiada y asignada' if creada else 'reactivada'} "
+				f"Se creó la copia {asignacion.entrenamiento.nombre} "
 				f"para {asignacion.usuario.username}.",
 			)
 			return redirect("panel_admin:entrenamiento_detalle", entrenamiento_id=entrenamiento.pk)

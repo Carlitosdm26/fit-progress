@@ -31,7 +31,10 @@ from .models import (
 	UsuarioEntrenamiento,
 	UsuarioEntrenamientoEjercicio,
 )
-from .services import eliminar_serie_y_reenumerar
+from .services import (
+	eliminar_serie_y_reenumerar,
+	purgar_rutina_eliminada_sin_sesiones,
+)
 
 logger = logging.getLogger("tracker")
 
@@ -467,6 +470,7 @@ def eliminar_entrenamiento(request, asignacion_id):
 		UsuarioEntrenamiento.objects.filter(entrenamiento=entrenamiento).update(
 			activa=False
 		)
+		purgar_rutina_eliminada_sin_sesiones(entrenamiento.pk)
 	messages.success(
 		request,
 		"La rutina se eliminó de tus rutinas. Tus sesiones e historial se conservaron.",
@@ -588,11 +592,15 @@ def eliminar_sesion(request, sesion_id):
 	perfil = perfil_actual(request)
 	if perfil is None:
 		return redirect("login")
-	sesion = SesionEntrenamiento.objects.filter(
-		pk=sesion_id, usuario_entrenamiento__usuario=perfil
-	).first()
+	with transaction.atomic():
+		sesion = SesionEntrenamiento.objects.select_for_update().filter(
+			pk=sesion_id, usuario_entrenamiento__usuario=perfil
+		).select_related("usuario_entrenamiento__entrenamiento").first()
+		if sesion is not None:
+			entrenamiento_id = sesion.usuario_entrenamiento.entrenamiento_id
+			sesion.delete()
+			purgar_rutina_eliminada_sin_sesiones(entrenamiento_id)
 	if sesion is not None:
-		sesion.delete()
 		messages.success(request, "Sesión eliminada correctamente.")
 	return redirect("dashboard")
 
