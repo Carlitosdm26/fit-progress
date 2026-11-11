@@ -3,7 +3,8 @@ from decimal import Decimal
 
 from django.db import IntegrityError, connection
 from django.db.migrations.executor import MigrationExecutor
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, Permission
+from django.contrib.contenttypes.models import ContentType
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
@@ -424,6 +425,47 @@ class AutenticacionYRutinasTests(TestCase):
 			UsuarioEntrenamientoEjercicio.objects.filter(pk=seleccion.pk).exists()
 		)
 		self.assertTrue(Ejercicio.objects.filter(pk=ejercicio.pk).exists())
+
+	def test_panel_admin_elimina_usuario_con_permisos_y_grupos(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="test-password",
+		)
+		usuario = get_user_model().objects.create_user(
+			username="usuario-con-grupo",
+			email="grupo@example.com",
+			password="test-password",
+		)
+		grupo = Group.objects.create(name="grupo-prueba")
+		permission = Permission.objects.create(
+			name="Permiso de prueba",
+			content_type=ContentType.objects.get_for_model(Entrenamiento),
+			codename="test_membership_delete",
+		)
+		usuario.groups.add(grupo)
+		usuario.user_permissions.add(permission)
+		self.client.force_login(admin_user)
+
+		respuesta = self.client.post(
+			reverse("panel_admin:usuario_eliminar", args=[usuario.pk]),
+			{"confirmacion": usuario.username},
+		)
+
+		self.assertRedirects(respuesta, reverse("panel_admin:usuarios"))
+		self.assertFalse(get_user_model().objects.filter(pk=usuario.pk).exists())
+		self.assertFalse(
+			get_user_model().groups.through.objects.filter(
+				usuario_id=usuario.pk
+			).exists()
+		)
+		self.assertFalse(
+			get_user_model().user_permissions.through.objects.filter(
+				usuario_id=usuario.pk
+			).exists()
+		)
+		self.assertTrue(Group.objects.filter(pk=grupo.pk).exists())
+		self.assertTrue(Permission.objects.filter(pk=permission.pk).exists())
 
 	def test_panel_admin_impide_eliminarse_a_si_mismo_y_restringe_a_superusuarios(self):
 		admin_user = get_user_model().objects.create_superuser(
