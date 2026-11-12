@@ -356,7 +356,6 @@ class AdminEjercicioForm(forms.ModelForm):
 			video_id = path_parts[1]
 		else:
 			video_id = ""
-
 		if not video_id:
 			raise forms.ValidationError(
 				"El enlace debe apuntar directamente a un vídeo de YouTube."
@@ -552,6 +551,33 @@ class AgregarEjercicioARutinaForm(forms.Form):
 
 
 class EjercicioForm(forms.ModelForm):
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		grupos_musculares = list(
+			Ejercicio.objects.exclude(grupo_muscular="")
+			.order_by("grupo_muscular")
+			.values_list("grupo_muscular", flat=True)
+			.distinct()
+		)
+		materiales = list(
+			Ejercicio.objects.exclude(equipamiento="")
+			.order_by("equipamiento")
+			.values_list("equipamiento", flat=True)
+			.distinct()
+		)
+		self.fields["grupo_muscular"] = forms.ChoiceField(
+			label=self.fields["grupo_muscular"].label,
+			choices=[("", "Selecciona un grupo muscular")]
+			+ [(value, value) for value in grupos_musculares],
+			required=True,
+		)
+		self.fields["equipamiento"] = forms.ChoiceField(
+			label=self.fields["equipamiento"].label,
+			choices=[("", "Selecciona un material")]
+			+ [(value, value) for value in materiales],
+			required=False,
+		)
+
 	class Meta:
 		model = Ejercicio
 		fields = ("nombre", "grupo_muscular", "equipamiento", "descripcion")
@@ -588,7 +614,7 @@ class SesionForm(forms.Form):
 				existing_series.setdefault(serie.usuario_entrenamiento_ejercicio_id, []).append(serie)
 		selecciones = asignacion.ejercicios_elegidos.filter(activo=True).select_related(
 			"entrenamiento_ejercicio__ejercicio"
-		)
+		).order_by("entrenamiento_ejercicio__orden", "pk")
 		for seleccion in selecciones:
 			ejercicio = seleccion.entrenamiento_ejercicio.ejercicio
 			series_existentes = existing_series.get(seleccion.pk, [])
@@ -692,6 +718,7 @@ class EjercicioSesionForm(forms.Form):
 		selecciones = asignacion.ejercicios_elegidos.filter(activo=True).select_related(
 			"entrenamiento_ejercicio__ejercicio"
 		)
+		selecciones = selecciones.order_by("entrenamiento_ejercicio__orden", "pk")
 		selected_id = str(editar_seleccion_id) if editar_seleccion_id else None
 		self.fields["ejercicio"].queryset = selecciones.exclude(
 			pk__in=sesion.series.values_list("usuario_entrenamiento_ejercicio_id", flat=True)
