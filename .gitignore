@@ -6,4 +6,5 @@ db.sqlite3
 staticfiles/
 media/
 logs/
+media/
 .pytest_cache/

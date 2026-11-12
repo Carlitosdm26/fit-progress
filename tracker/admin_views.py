@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.views import redirect_to_login
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Min, Q
+from django.db.models import Count, Max, Min, Q
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
@@ -694,6 +694,18 @@ def sesion_detalle(request, sesion_id):
 	if action == "anadir_serie" and serie_form.is_valid():
 		serie = serie_form.save(commit=False)
 		serie.sesion_entrenamiento = sesion
+		orden_ejercicio = Serie.objects.filter(
+			sesion_entrenamiento=sesion,
+			usuario_entrenamiento_ejercicio=serie.usuario_entrenamiento_ejercicio,
+		).values_list("orden_ejercicio", flat=True).first()
+		if orden_ejercicio is None:
+			orden_ejercicio = (
+				Serie.objects.filter(sesion_entrenamiento=sesion).aggregate(
+					orden_maximo=Max("orden_ejercicio")
+				)["orden_maximo"]
+				or 0
+			) + 1
+		serie.orden_ejercicio = orden_ejercicio
 		try:
 			serie.save()
 		except IntegrityError:
@@ -751,7 +763,8 @@ def _sesion_series_context(sesion):
 		sesion.series.select_related(
 			"usuario_entrenamiento_ejercicio__entrenamiento_ejercicio__ejercicio"
 		).order_by(
-			"usuario_entrenamiento_ejercicio__entrenamiento_ejercicio__orden",
+			"orden_ejercicio",
+			"usuario_entrenamiento_ejercicio_id",
 			"usuario_entrenamiento_ejercicio__entrenamiento_ejercicio__ejercicio__nombre",
 			"numero_serie",
 		)

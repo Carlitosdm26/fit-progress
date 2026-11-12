@@ -194,7 +194,8 @@ def historial_sesiones(request):
 			queryset=Serie.objects.select_related(
 				"usuario_entrenamiento_ejercicio__entrenamiento_ejercicio__ejercicio"
 			).order_by(
-				"usuario_entrenamiento_ejercicio__entrenamiento_ejercicio__orden",
+				"orden_ejercicio",
+				"usuario_entrenamiento_ejercicio_id",
 				"numero_serie",
 			),
 		)
@@ -589,13 +590,17 @@ def editar_sesion(request, sesion_id):
 					"editable": seleccion.activo,
 				}
 			)
+	guardados.sort(key=lambda guardado: guardado["series"][0].orden_ejercicio)
 	if request.method == "POST" and form.is_valid():
 		with transaction.atomic():
 			sesion.notas = form.cleaned_data["notas"]
 			sesion.save(update_fields=["notas"])
 			seleccion = form.cleaned_data["ejercicio"]
+			orden_ejercicio = sesion.series.filter(
+				usuario_entrenamiento_ejercicio=seleccion
+			).values_list("orden_ejercicio", flat=True).first()
 			sesion.series.filter(usuario_entrenamiento_ejercicio=seleccion).delete()
-			guardar_series(sesion, form)
+			guardar_series(sesion, form, orden_ejercicio=orden_ejercicio)
 		messages.success(request, "Ejercicio guardado en la sesión.")
 		return redirect("editar_sesion", sesion_id=sesion.pk)
 	return render(
@@ -673,13 +678,21 @@ def eliminar_serie_sesion(request, sesion_id, serie_id):
 	return redirect("editar_sesion", sesion_id=sesion.pk)
 
 
-def guardar_series(sesion, form):
+def guardar_series(sesion, form, orden_ejercicio=None):
 	seleccion = form.cleaned_data["ejercicio"]
+	if orden_ejercicio is None:
+		orden_ejercicio = (
+			sesion.series.order_by("-orden_ejercicio")
+			.values_list("orden_ejercicio", flat=True)
+			.first()
+			or 0
+		) + 1
 	Serie.objects.bulk_create(
 		[
 			Serie(
 				sesion_entrenamiento=sesion,
 				usuario_entrenamiento_ejercicio=seleccion,
+				orden_ejercicio=orden_ejercicio,
 				numero_serie=serie["numero_serie"],
 				repeticiones=serie["repeticiones"],
 				peso=serie["peso"],

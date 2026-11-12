@@ -1,18 +1,18 @@
-from io import BytesIO
-from tempfile import TemporaryDirectory
 from datetime import datetime
 from decimal import Decimal
+from io import BytesIO
+from tempfile import TemporaryDirectory
 
+from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, connection
 from django.db.migrations.executor import MigrationExecutor
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
-from django.contrib.auth import get_user_model
 from PIL import Image
 
 from .models import (
@@ -1842,6 +1842,68 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 			executor = MigrationExecutor(connection)
 			executor.migrate(executor.loader.graph.leaf_nodes())
 
+	def test_migracion_conserva_el_orden_previo_de_las_sesiones(self):
+		migracion_previa = ("tracker", "0013_add_exercise_visual_guides")
+		migracion_actual = ("tracker", "0014_session_exercise_order")
+		executor = MigrationExecutor(connection)
+		executor.migrate([migracion_previa])
+		apps_previas = executor.loader.project_state([migracion_previa]).apps
+		EntrenamientoAnterior = apps_previas.get_model("tracker", "Entrenamiento")
+		EjercicioAnterior = apps_previas.get_model("tracker", "Ejercicio")
+		EntradaAnterior = apps_previas.get_model("tracker", "EntrenamientoEjercicio")
+		AsignacionAnterior = apps_previas.get_model("tracker", "UsuarioEntrenamiento")
+		SeleccionAnterior = apps_previas.get_model(
+			"tracker", "UsuarioEntrenamientoEjercicio"
+		)
+		SesionAnterior = apps_previas.get_model("tracker", "SesionEntrenamiento")
+		SerieAnterior = apps_previas.get_model("tracker", "Serie")
+		usuario = get_user_model().objects.create_user(
+			username="orden-migracion", email="orden-migracion@example.com"
+		)
+		entrenamiento = EntrenamientoAnterior.objects.create(nombre="Rutina migrada")
+		asignacion = AsignacionAnterior.objects.create(
+			usuario_id=usuario.pk, entrenamiento=entrenamiento
+		)
+		sesion = SesionAnterior.objects.create(
+			usuario_entrenamiento=asignacion, fecha=timezone.now()
+		)
+		for orden, nombre in ((2, "Segundo"), (1, "Primero")):
+			ejercicio = EjercicioAnterior.objects.create(
+				nombre=nombre, grupo_muscular="Piernas"
+			)
+			entrada = EntradaAnterior.objects.create(
+				entrenamiento=entrenamiento, ejercicio=ejercicio, orden=orden
+			)
+			seleccion = SeleccionAnterior.objects.create(
+				usuario_entrenamiento=asignacion,
+				entrenamiento_ejercicio=entrada,
+			)
+			SerieAnterior.objects.create(
+				sesion_entrenamiento=sesion,
+				usuario_entrenamiento_ejercicio=seleccion,
+				numero_serie=1,
+				repeticiones=8,
+				peso=Decimal("50.00"),
+			)
+
+		try:
+			executor = MigrationExecutor(connection)
+			executor.migrate([migracion_actual])
+			apps_actuales = executor.loader.project_state([migracion_actual]).apps
+			SerieActual = apps_actuales.get_model("tracker", "Serie")
+			nombres = list(
+				SerieActual.objects.filter(sesion_entrenamiento_id=sesion.pk)
+				.order_by("orden_ejercicio")
+				.values_list(
+					"usuario_entrenamiento_ejercicio__entrenamiento_ejercicio__ejercicio__nombre",
+					flat=True,
+				)
+			)
+			self.assertEqual(nombres, ["Segundo", "Primero"])
+		finally:
+			executor = MigrationExecutor(connection)
+			executor.migrate(executor.loader.graph.leaf_nodes())
+
 	def test_user_edit_does_not_depend_on_group_join_table(self):
 		admin_user = get_user_model().objects.create_superuser(
 			username="admin",
@@ -2177,13 +2239,22 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 			password="UnaClaveSegura123!",
 		)
 		self.client.force_login(cuenta)
+		Ejercicio.objects.create(
+			nombre="Extensión", grupo_muscular="Cuádriceps", equipamiento="Máquina"
+		)
+
+		respuesta = self.client.get(reverse("ejercicios"))
+		self.assertContains(respuesta, '<select name="grupo_muscular"')
+		self.assertContains(respuesta, '<select name="equipamiento"')
+		self.assertContains(respuesta, '<option value="Cuádriceps">Cuádriceps</option>')
+		self.assertContains(respuesta, '<option value="Máquina">Máquina</option>')
 
 		respuesta = self.client.post(
 			reverse("ejercicios"),
 			{
 				"nombre": "Prensa de piernas",
 				"grupo_muscular": "Cuádriceps",
-				"equipamiento": "Máquina de prensa",
+				"equipamiento": "Máquina",
 				"descripcion": "3 series de 10 repeticiones.",
 			},
 		)
@@ -2192,7 +2263,132 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 		self.assertRedirects(respuesta, reverse("ejercicios"))
 		self.assertTrue(ejercicio.activo)
 		self.assertEqual(ejercicio.grupo_muscular, "Cuádriceps")
-		self.assertEqual(ejercicio.equipamiento, "Máquina de prensa")
+		self.assertEqual(ejercicio.equipamiento, "Máquina")
+
+		respuesta = self.client.post(
+			reverse("ejercicios"),
+			{
+				"nombre": "Material nuevo",
+				"grupo_muscular": "Grupo nuevo",
+				"equipamiento": "Material nuevo",
+				"descripcion": "",
+			},
+		)
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertFalse(Ejercicio.objects.filter(nombre="Material nuevo").exists())
+
+	def test_panel_admin_muestra_indicadores_de_imagen_y_video(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin-guias",
+			email="admin-guias@example.com",
+			password="UnaClaveSegura123!",
+		)
+		self.client.force_login(admin_user)
+		Ejercicio.objects.create(nombre="Sin recursos", grupo_muscular="Piernas")
+
+		buffer = BytesIO()
+		Image.new("RGB", (4, 4), "white").save(buffer, format="PNG")
+		with TemporaryDirectory() as media_root:
+			with override_settings(MEDIA_ROOT=media_root):
+				respuesta = self.client.post(
+					reverse("panel_admin:ejercicio_nuevo"),
+					{
+						"nombre": "Con recursos",
+						"grupo_muscular": "Espalda",
+						"equipamiento": "Barra",
+						"descripcion": "",
+						"video_url": "https://youtu.be/sentadilla123",
+						"activo": "on",
+						"guia_imagen": SimpleUploadedFile(
+							"remo.png", buffer.getvalue(), content_type="image/png"
+						),
+					},
+				)
+				self.assertRedirects(respuesta, reverse("panel_admin:ejercicios"))
+
+				ejercicio = Ejercicio.objects.get(nombre="Con recursos")
+				self.assertTrue(ejercicio.guia_imagen)
+				listado = self.client.get(reverse("panel_admin:ejercicios"))
+				self.assertContains(listado, 'aria-label="Imagen asignada"')
+				self.assertContains(listado, 'aria-label="Sin imagen"')
+				self.assertContains(listado, 'aria-label="Vídeo de YouTube asignado"')
+				self.assertContains(listado, 'aria-label="Sin vídeo de YouTube"')
+
+				respuesta_imagen = self.client.get(ejercicio.guia_imagen.url)
+				self.assertEqual(respuesta_imagen.status_code, 200)
+				self.assertEqual(respuesta_imagen["Content-Type"], "image/png")
+				respuesta_imagen.close()
+
+	def test_sesion_muestra_ejercicios_en_el_orden_en_que_se_registran(self):
+		cuenta = get_user_model().objects.create_user(
+			username="orden-sesion@example.com",
+			email="orden-sesion@example.com",
+			password="UnaClaveSegura123!",
+		)
+		entrenamiento = Entrenamiento.objects.create(nombre="Orden personalizado")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=cuenta, entrenamiento=entrenamiento
+		)
+		selecciones = []
+		for orden, nombre in enumerate(("Ejercicio uno", "Ejercicio dos", "Ejercicio tres"), start=1):
+			ejercicio = Ejercicio.objects.create(
+				nombre=nombre, grupo_muscular="Piernas"
+			)
+			entrada = EntrenamientoEjercicio.objects.create(
+				entrenamiento=entrenamiento, ejercicio=ejercicio, orden=orden
+			)
+			selecciones.append(
+				UsuarioEntrenamientoEjercicio.objects.create(
+					usuario_entrenamiento=asignacion,
+					entrenamiento_ejercicio=entrada,
+				)
+			)
+		self.client.force_login(cuenta)
+
+		respuesta = self.client.get(reverse("registrar_sesion", args=[asignacion.pk]))
+		html = respuesta.content.decode()
+		self.assertLess(html.index("Ejercicio uno"), html.index("Ejercicio dos"))
+		self.assertLess(html.index("Ejercicio dos"), html.index("Ejercicio tres"))
+
+		sesion = None
+		for seleccion in (selecciones[0], selecciones[2], selecciones[1]):
+			respuesta = self.client.post(
+				reverse("registrar_sesion", args=[asignacion.pk])
+				if sesion is None
+				else reverse("editar_sesion", args=[sesion.pk]),
+				{
+					"ejercicio": seleccion.pk,
+					"numero_series": "1",
+					"reps_1": "8",
+					"peso_1": "50",
+					"notas": "",
+				},
+			)
+			sesion = SesionEntrenamiento.objects.get(usuario_entrenamiento=asignacion)
+			self.assertEqual(respuesta.status_code, 302)
+
+		nombres_registro = list(
+			sesion.series.order_by("orden_ejercicio").values_list(
+				"usuario_entrenamiento_ejercicio__entrenamiento_ejercicio__ejercicio__nombre",
+				flat=True,
+			)
+		)
+		self.assertEqual(
+			nombres_registro,
+			["Ejercicio uno", "Ejercicio tres", "Ejercicio dos"],
+		)
+
+		for url in (
+			reverse("editar_sesion", args=[sesion.pk]),
+			reverse("historial_sesiones"),
+		):
+			respuesta = self.client.get(url)
+			html = respuesta.content.decode()
+			posiciones = [
+				html.index(f"<strong>{nombre}</strong>")
+				for nombre in nombres_registro
+			]
+			self.assertEqual(posiciones, sorted(posiciones))
 
 	def test_catalogo_rechaza_ejercicio_duplicado_sin_distinguir_mayusculas(self):
 		Ejercicio.objects.create(nombre="Sentadilla libre", grupo_muscular="Cuádriceps")

@@ -279,6 +279,7 @@ class Serie(models.Model):
 	usuario_entrenamiento_ejercicio = models.ForeignKey(
 		UsuarioEntrenamientoEjercicio, on_delete=models.PROTECT, related_name="series"
 	)
+	orden_ejercicio = models.PositiveIntegerField(default=1)
 	numero_serie = models.PositiveIntegerField(validators=[MinValueValidator(1)])
 	repeticiones = models.PositiveIntegerField(validators=[MinValueValidator(1)])
 	peso = models.DecimalField(
@@ -286,7 +287,11 @@ class Serie(models.Model):
 	)
 
 	class Meta:
-		ordering = ["numero_serie"]
+		ordering = [
+			"orden_ejercicio",
+			"usuario_entrenamiento_ejercicio_id",
+			"numero_serie",
+		]
 		constraints = [
 			models.UniqueConstraint(
 				fields=[
