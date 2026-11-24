@@ -79,6 +79,13 @@ class SeguimientoModelTests(TestCase):
 
 		self.assertEqual(serie.peso, Decimal("62.50"))
 
+	def test_ejercicio_nuevo_no_se_mide_por_tiempo_por_defecto(self):
+		ejercicio = Ejercicio.objects.create(
+			nombre="Remo con mancuerna",
+			grupo_muscular="Espalda",
+		)
+		self.assertFalse(ejercicio.mide_tiempo)
+
 	def test_no_permite_series_duplicadas_en_una_sesion(self):
 		datos = {
 			"sesion_entrenamiento": self.sesion,
@@ -2412,6 +2419,81 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 		self.assertEqual(respuesta.status_code, 200)
 		self.assertContains(respuesta, "Ya existe un ejercicio con ese nombre.")
 		self.assertEqual(Ejercicio.objects.count(), 1)
+
+	def test_usuario_puede_crear_ejercicio_medido_por_tiempo(self):
+		cuenta = get_user_model().objects.create_user(
+			username="cardio-create@example.com",
+			email="cardio-create@example.com",
+			password="UnaClaveSegura123!",
+		)
+		vincular_usuario_gimnasio(cuenta, "Cardio")
+		Ejercicio.objects.create(nombre="Ejercicio base", grupo_muscular="Cardio")
+		self.client.force_login(cuenta)
+
+		respuesta = self.client.post(
+			reverse("ejercicios"),
+			{
+				"nombre": "Burpee con salto",
+				"grupo_muscular": "Cardio",
+				"equipamiento": "",
+				"descripcion": "Ejercicio continuo.",
+				"mide_tiempo": "on",
+			},
+		)
+
+		self.assertRedirects(respuesta, reverse("ejercicios"))
+		ejercicio = Ejercicio.objects.get(nombre="Burpee con salto")
+		self.assertTrue(ejercicio.mide_tiempo)
+
+	def test_usuario_puede_registrar_ejercicio_por_tiempo(self):
+		cuenta = get_user_model().objects.create_user(
+			username="tabata@example.com",
+			email="tabata@example.com",
+			password="UnaClaveSegura123!",
+		)
+		perfil = vincular_usuario_gimnasio(cuenta, "Tabata")
+		entrenamiento = Entrenamiento.objects.create(nombre="Cardio")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=perfil, entrenamiento=entrenamiento
+		)
+		ejercicio = Ejercicio.objects.create(
+			nombre="Plancha",
+			grupo_muscular="Abdomen",
+			mide_tiempo=True,
+		)
+		entrenamiento_ejercicio = EntrenamientoEjercicio.objects.create(
+			entrenamiento=entrenamiento,
+			ejercicio=ejercicio,
+			orden=1,
+			duracion_objetivo_segundos=40,
+			descanso_objetivo_segundos=20,
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion,
+			entrenamiento_ejercicio=entrenamiento_ejercicio,
+		)
+		self.client.force_login(cuenta)
+
+		respuesta = self.client.post(
+			reverse("registrar_sesion", args=[asignacion.pk]),
+			{
+				"ejercicio": seleccion.pk,
+				"numero_series": "2",
+				"tiempo_1": "40",
+				"descanso_1": "20",
+				"tiempo_2": "35",
+				"descanso_2": "25",
+				"notas": "Tabata",
+			},
+		)
+
+		sesion = SesionEntrenamiento.objects.get(usuario_entrenamiento=asignacion)
+		self.assertRedirects(respuesta, reverse("editar_sesion", args=[sesion.pk]))
+		serie = sesion.series.get(numero_serie=1)
+		self.assertEqual(serie.duracion_segundos, 40)
+		self.assertEqual(serie.descanso_segundos, 20)
+		self.assertIsNone(serie.repeticiones)
+		self.assertIsNone(serie.peso)
 
 	def test_usuario_puede_registrar_repeticiones_y_peso(self):
 		cuenta = get_user_model().objects.create_user(

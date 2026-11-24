@@ -244,6 +244,7 @@ class AdminEjercicioForm(forms.ModelForm):
 			"grupo_muscular",
 			"equipamiento",
 			"descripcion",
+			"mide_tiempo",
 			"guia_imagen",
 			"video_url",
 			"activo",
@@ -253,6 +254,7 @@ class AdminEjercicioForm(forms.ModelForm):
 			"grupo_muscular": "Grupo muscular",
 			"equipamiento": "Equipamiento",
 			"descripcion": "Descripción",
+			"mide_tiempo": "Se mide por tiempo",
 			"guia_imagen": "Imagen explicativa",
 			"video_url": "Vídeo de YouTube",
 			"activo": "Disponible para nuevas rutinas",
@@ -406,8 +408,18 @@ class AdminAsignacionForm(forms.ModelForm):
 class AdminEntrenamientoEjercicioForm(forms.ModelForm):
 	class Meta:
 		model = EntrenamientoEjercicio
-		fields = ("ejercicio", "orden")
-		labels = {"ejercicio": "Ejercicio", "orden": "Orden en la rutina"}
+		fields = (
+			"ejercicio",
+			"orden",
+			"duracion_objetivo_segundos",
+			"descanso_objetivo_segundos",
+		)
+		labels = {
+			"ejercicio": "Ejercicio",
+			"orden": "Orden en la rutina",
+			"duracion_objetivo_segundos": "Tiempo objetivo (segundos)",
+			"descanso_objetivo_segundos": "Descanso objetivo (segundos)",
+		}
 
 	def __init__(self, *args, entrenamiento, **kwargs):
 		super().__init__(*args, **kwargs)
@@ -421,6 +433,16 @@ class AdminEntrenamientoEjercicioForm(forms.ModelForm):
 		cleaned_data = super().clean()
 		ejercicio = cleaned_data.get("ejercicio")
 		orden = cleaned_data.get("orden")
+		duracion = cleaned_data.get("duracion_objetivo_segundos")
+		descanso = cleaned_data.get("descanso_objetivo_segundos")
+		if ejercicio and not ejercicio.mide_tiempo:
+			cleaned_data["duracion_objetivo_segundos"] = None
+			cleaned_data["descanso_objetivo_segundos"] = None
+		elif ejercicio and ejercicio.mide_tiempo and duracion is None:
+			self.add_error(
+				"duracion_objetivo_segundos",
+				"Introduce el tiempo objetivo para este ejercicio.",
+			)
 		if (
 			self.instance.pk
 			and ejercicio
@@ -481,12 +503,21 @@ class AdminSesionForm(forms.ModelForm):
 class AdminSerieForm(forms.ModelForm):
 	class Meta:
 		model = Serie
-		fields = ("usuario_entrenamiento_ejercicio", "numero_serie", "repeticiones", "peso")
+		fields = (
+			"usuario_entrenamiento_ejercicio",
+			"numero_serie",
+			"repeticiones",
+			"peso",
+			"duracion_segundos",
+			"descanso_segundos",
+		)
 		labels = {
 			"usuario_entrenamiento_ejercicio": "Ejercicio de la rutina",
 			"numero_serie": "Número de serie",
 			"repeticiones": "Repeticiones",
 			"peso": "Peso (kg)",
+			"duracion_segundos": "Duración (segundos)",
+			"descanso_segundos": "Descanso (segundos)",
 		}
 
 	def __init__(self, *args, sesion, **kwargs):
@@ -510,6 +541,21 @@ class AdminSerieForm(forms.ModelForm):
 		cleaned_data = super().clean()
 		seleccion = cleaned_data.get("usuario_entrenamiento_ejercicio")
 		numero = cleaned_data.get("numero_serie")
+		repeticiones = cleaned_data.get("repeticiones")
+		peso = cleaned_data.get("peso")
+		duracion = cleaned_data.get("duracion_segundos")
+		descanso = cleaned_data.get("descanso_segundos")
+		if seleccion:
+			mide_tiempo = seleccion.entrenamiento_ejercicio.ejercicio.mide_tiempo
+			if mide_tiempo:
+				if duracion is None:
+					self.add_error("duracion_segundos", "Introduce la duración de la serie.")
+				if repeticiones is not None or peso is not None:
+					self.add_error(None, "Este ejercicio se registra por tiempo, no por repeticiones y peso.")
+			elif duracion is not None or descanso is not None:
+				self.add_error(None, "Este ejercicio no está configurado para medir tiempo.")
+			elif (repeticiones is None) != (peso is None):
+				self.add_error(None, "Completa repeticiones y peso.")
 		if seleccion and numero and Serie.objects.filter(
 			sesion_entrenamiento=self.sesion,
 			usuario_entrenamiento_ejercicio=seleccion,
@@ -580,12 +626,24 @@ class EjercicioForm(forms.ModelForm):
 
 	class Meta:
 		model = Ejercicio
-		fields = ("nombre", "grupo_muscular", "equipamiento", "descripcion")
+		fields = (
+			"nombre",
+			"grupo_muscular",
+			"equipamiento",
+			"descripcion",
+			"mide_tiempo",
+		)
 		labels = {
 			"nombre": "Nombre del ejercicio",
 			"grupo_muscular": "Grupo muscular",
 			"equipamiento": "Material",
 			"descripcion": "Indicaciones",
+			"mide_tiempo": "Este ejercicio se mide por tiempo",
+		}
+		help_texts = {
+			"mide_tiempo": (
+				"Activa duración y descanso en lugar de repeticiones y peso."
+			),
 		}
 		widgets = {
 			"descripcion": forms.Textarea(attrs={"rows": 3}),
@@ -740,52 +798,128 @@ class EjercicioSesionForm(forms.Form):
 			count_value = 0
 		self.fields["numero_series"].initial = count_value
 		self.series_fields = []
+		selected_selection = None
+		if self.is_bound:
+			try:
+				selected_selection = selecciones.get(pk=self.data.get("ejercicio"))
+			except (UsuarioEntrenamientoEjercicio.DoesNotExist, TypeError, ValueError):
+				pass
+		elif selected_id:
+			selected_selection = selecciones.filter(pk=selected_id).first()
+		if selected_selection is None:
+			selected_selection = selecciones.first()
+		mide_tiempo = bool(
+			selected_selection
+			and selected_selection.entrenamiento_ejercicio.ejercicio.mide_tiempo
+		)
+		self.mide_tiempo = mide_tiempo
 		for numero_serie in range(1, count_value + 1):
 			reps_name = f"reps_{numero_serie}"
 			peso_name = f"peso_{numero_serie}"
+			tiempo_name = f"tiempo_{numero_serie}"
+			descanso_name = f"descanso_{numero_serie}"
 			serie_existente = next(
 				(serie for serie in existing_series if serie.numero_serie == numero_serie), None
 			)
-			self.fields[reps_name] = forms.IntegerField(
-				required=False,
-				min_value=1,
-				initial=serie_existente.repeticiones if serie_existente else None,
-				label=f"Serie {numero_serie} - repeticiones",
-			)
-			self.fields[peso_name] = forms.DecimalField(
-				required=False,
-				min_value=Decimal("0"),
-				max_digits=7,
-				decimal_places=2,
-				initial=serie_existente.peso if serie_existente else None,
-				label=f"Serie {numero_serie} - peso (kg)",
-			)
-			self.series_fields.append(
-				{
-					"number": numero_serie,
-					"reps_field": self[reps_name],
-					"peso_field": self[peso_name],
-				}
-			)
+			if mide_tiempo:
+				self.fields[tiempo_name] = forms.IntegerField(
+					required=False,
+					min_value=1,
+					initial=(
+						serie_existente.duracion_segundos
+						if serie_existente and serie_existente.duracion_segundos is not None
+						else (
+							selected_selection.entrenamiento_ejercicio.duracion_objetivo_segundos
+							if selected_selection else None
+						)
+					),
+					label=f"Serie {numero_serie} - duración (segundos)",
+				)
+				self.fields[descanso_name] = forms.IntegerField(
+					required=False,
+					min_value=0,
+					initial=(
+						serie_existente.descanso_segundos
+						if serie_existente and serie_existente.descanso_segundos is not None
+						else (
+							selected_selection.entrenamiento_ejercicio.descanso_objetivo_segundos
+							if selected_selection else 0
+						)
+					),
+					label=f"Serie {numero_serie} - descanso (segundos)",
+				)
+				self.series_fields.append(
+					{
+						"number": numero_serie,
+						"tiempo_field": self[tiempo_name],
+						"descanso_field": self[descanso_name],
+					}
+				)
+			else:
+				self.fields[reps_name] = forms.IntegerField(
+					required=False,
+					min_value=1,
+					initial=serie_existente.repeticiones if serie_existente else None,
+					label=f"Serie {numero_serie} - repeticiones",
+				)
+				self.fields[peso_name] = forms.DecimalField(
+					required=False,
+					min_value=Decimal("0"),
+					max_digits=7,
+					decimal_places=2,
+					initial=serie_existente.peso if serie_existente else None,
+					label=f"Serie {numero_serie} - peso (kg)",
+				)
+				self.series_fields.append(
+					{
+						"number": numero_serie,
+						"reps_field": self[reps_name],
+						"peso_field": self[peso_name],
+					}
+				)
 
 	def clean(self):
 		cleaned_data = super().clean()
 		self.series_data = []
 		for serie in self.series_fields:
-			repeticiones = cleaned_data.get(f"reps_{serie['number']}")
-			peso = cleaned_data.get(f"peso_{serie['number']}")
-			if (repeticiones is None) != (peso is None):
-				raise forms.ValidationError(
-					f"Completa repeticiones y peso en la serie {serie['number']}."
-				)
-			if repeticiones is not None and peso is not None:
+			if self.mide_tiempo:
+				duracion = cleaned_data.get(f"tiempo_{serie['number']}")
+				descanso = cleaned_data.get(f"descanso_{serie['number']}")
+				if duracion is None:
+					raise forms.ValidationError(
+						f"Completa la duración de la serie {serie['number']}."
+					)
 				self.series_data.append(
 					{
 						"numero_serie": serie["number"],
-						"repeticiones": repeticiones,
-						"peso": peso,
+						"repeticiones": None,
+						"peso": None,
+						"duracion_segundos": duracion,
+						"descanso_segundos": descanso if descanso is not None else 0,
 					}
 				)
+			else:
+				repeticiones = cleaned_data.get(f"reps_{serie['number']}")
+				peso = cleaned_data.get(f"peso_{serie['number']}")
+				if (repeticiones is None) != (peso is None):
+					raise forms.ValidationError(
+						f"Completa repeticiones y peso en la serie {serie['number']}."
+					)
+				if repeticiones is not None and peso is not None:
+					self.series_data.append(
+						{
+							"numero_serie": serie["number"],
+							"repeticiones": repeticiones,
+							"peso": peso,
+							"duracion_segundos": None,
+							"descanso_segundos": None,
+						}
+					)
 		if not self.series_data:
-			self.add_error(None, "Registra al menos una serie con repeticiones y peso.")
+			self.add_error(
+				None,
+				"Registra al menos una serie con duración."
+				if self.mide_tiempo
+				else "Registra al menos una serie con repeticiones y peso.",
+			)
 		return cleaned_data

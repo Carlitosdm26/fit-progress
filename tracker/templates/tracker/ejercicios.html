@@ -84,6 +84,12 @@
 			{{ form.equipamiento }}{{ form.equipamiento.errors }}
 			<label for="{{ form.descripcion.id_for_label }}">{{ form.descripcion.label }}</label>
 			{{ form.descripcion }}{{ form.descripcion.errors }}
+			<label class="flag" for="{{ form.mide_tiempo.id_for_label }}">
+				{{ form.mide_tiempo }}
+				<span>{{ form.mide_tiempo.label }}</span>
+			</label>
+			{% if form.mide_tiempo.help_text %}<p class="help">{{ form.mide_tiempo.help_text }}</p>{% endif %}
+			{{ form.mide_tiempo.errors }}
 			<button class="button" type="submit">Añadir al catálogo</button>
 		</form>
 	</aside>

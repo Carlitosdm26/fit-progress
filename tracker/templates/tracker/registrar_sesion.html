@@ -22,7 +22,13 @@
             <div class="session-sets">
                 {% for serie in guardado.series %}
                 <div class="session-set">
-                    <span><strong>Serie {{ serie.numero_serie }}</strong><small>{{ serie.repeticiones }} repeticiones · {{ serie.peso }} kg</small></span>
+                    <span><strong>Serie {{ serie.numero_serie }}</strong><small>
+                        {% if serie.duracion_segundos != None %}
+                            {{ serie.duracion_segundos }} segundos{% if serie.descanso_segundos != None %} · {{ serie.descanso_segundos }} segundos de descanso{% endif %}
+                        {% else %}
+                            {{ serie.repeticiones }} repeticiones · {{ serie.peso }} kg
+                        {% endif %}
+                    </small></span>
                     <form method="post" action="{% url 'eliminar_serie_sesion' sesion.id serie.id %}" onsubmit="return confirm('¿Eliminar la serie {{ serie.numero_serie }} de {{ guardado.ejercicio.nombre }}?');">
                         {% csrf_token %}
                         <button class="button danger small" type="submit" aria-label="Eliminar serie {{ serie.numero_serie }} de {{ guardado.ejercicio.nombre }}">Eliminar serie</button>
@@ -54,8 +60,13 @@
         <div id="series-container">
             {% for serie in form.series_fields %}
             <div class="set-row">
+                {% if form.mide_tiempo %}
+                <div><label for="{{ serie.tiempo_field.id_for_label }}">Serie {{ serie.number }} - duración</label>{{ serie.tiempo_field }}{{ serie.tiempo_field.errors }}<small>segundos</small></div>
+                <div><label for="{{ serie.descanso_field.id_for_label }}">Descanso</label>{{ serie.descanso_field }}{{ serie.descanso_field.errors }}<small>segundos</small></div>
+                {% else %}
                 <div><label for="{{ serie.reps_field.id_for_label }}">Serie {{ serie.number }} - repeticiones</label>{{ serie.reps_field }}{{ serie.reps_field.errors }}</div>
                 <div><label for="{{ serie.peso_field.id_for_label }}">Peso (kg)</label>{{ serie.peso_field }}{{ serie.peso_field.errors }}</div>
+                {% endif %}
             </div>
             {% endfor %}
         </div>
@@ -90,11 +101,20 @@
 <script>
     const numeroSeries = document.getElementById("{{ form.numero_series.id_for_label }}");
     const seriesContainer = document.getElementById("series-container");
+    const ejercicioSelect = document.getElementById("{{ form.ejercicio.id_for_label }}");
+    const mideTiempo = {{ form.mide_tiempo|yesno:"true,false" }};
     const seriesValues = new Map(
         Array.from(seriesContainer.querySelectorAll("input"), (input) => [input.name, input.value])
     );
 
-    numeroSeries.addEventListener("change", () => {
+    ejercicioSelect.addEventListener("change", () => {
+        const url = new URL(window.location.href);
+        url.searchParams.set("ejercicio", ejercicioSelect.value);
+        url.hash = "exercise-form";
+        window.location.href = url.toString();
+    });
+
+    const actualizarSeries = () => {
         seriesContainer.querySelectorAll("input").forEach((input) => {
             seriesValues.set(input.name, input.value);
         });
@@ -103,10 +123,16 @@
         for (let number = 1; number <= count; number += 1) {
             const row = document.createElement("div");
             row.className = "set-row";
-            [
-                { name: `reps_${number}`, label: `Serie ${number} - repeticiones`, min: "1" },
-                { name: `peso_${number}`, label: "Peso (kg)", min: "0", step: "0.01" },
-            ].forEach(({ name, label, min, step }) => {
+            const campos = mideTiempo
+                ? [
+                    { name: `tiempo_${number}`, label: `Serie ${number} - duración`, min: "1", suffix: "segundos" },
+                    { name: `descanso_${number}`, label: "Descanso", min: "0", suffix: "segundos" },
+                ]
+                : [
+                    { name: `reps_${number}`, label: `Serie ${number} - repeticiones`, min: "1" },
+                    { name: `peso_${number}`, label: "Peso (kg)", min: "0", step: "0.01" },
+                ];
+            campos.forEach(({ name, label, min, step, suffix }) => {
                 const field = document.createElement("div");
                 const fieldLabel = document.createElement("label");
                 const input = document.createElement("input");
@@ -116,16 +142,21 @@
                 input.name = name;
                 input.type = "number";
                 input.min = min;
-                input.required = true;
-                if (step) {
-                    input.step = step;
-                }
+                input.required = mideTiempo ? name.startsWith("tiempo_") : true;
+                if (step) input.step = step;
                 input.value = seriesValues.get(name) || "";
                 field.append(fieldLabel, input);
+                if (suffix) {
+                    const help = document.createElement("small");
+                    help.textContent = suffix;
+                    field.append(help);
+                }
                 row.append(field);
             });
             seriesContainer.append(row);
         }
-    });
+    };
+
+    numeroSeries.addEventListener("change", actualizarSeries);
 </script>
 {% endblock %}
