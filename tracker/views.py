@@ -518,7 +518,11 @@ def registrar_sesion(request, asignacion_id):
 	).first()
 	if asignacion is None:
 		return redirect("dashboard")
-	form = EjercicioSesionForm(asignacion, data=request.POST or None)
+	form = EjercicioSesionForm(
+		asignacion,
+		editar_seleccion_id=request.GET.get("ejercicio"),
+		data=request.POST or None,
+	)
 	if request.method == "POST" and form.is_valid():
 		with transaction.atomic():
 			sesion = SesionEntrenamiento.objects.create(
@@ -696,6 +700,8 @@ def guardar_series(sesion, form, orden_ejercicio=None):
 				numero_serie=serie["numero_serie"],
 				repeticiones=serie["repeticiones"],
 				peso=serie["peso"],
+				duracion_segundos=serie["duracion_segundos"],
+				descanso_segundos=serie["descanso_segundos"],
 			)
 			for serie in form.series_data
 		]

@@ -158,6 +158,11 @@ class Ejercicio(models.Model):
 	descripcion = models.TextField(blank=True)
 	equipamiento = models.CharField(max_length=120, blank=True)
 	grupo_muscular = models.CharField(max_length=80)
+	mide_tiempo = models.BooleanField(
+		default=False,
+		verbose_name="Se mide por tiempo",
+		help_text="Activa duración y descanso para ejercicios como plancha, cardio o Tabata.",
+	)
 	guia_imagen = models.ImageField(
 		upload_to="exercise_guides/",
 		blank=True,
@@ -215,6 +220,18 @@ class EntrenamientoEjercicio(models.Model):
 		Ejercicio, on_delete=models.PROTECT, related_name="entrenamientos"
 	)
 	orden = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+	duracion_objetivo_segundos = models.PositiveIntegerField(
+		null=True,
+		blank=True,
+		validators=[MinValueValidator(1)],
+		verbose_name="Tiempo objetivo (segundos)",
+	)
+	descanso_objetivo_segundos = models.PositiveIntegerField(
+		null=True,
+		blank=True,
+		validators=[MinValueValidator(0)],
+		verbose_name="Descanso objetivo (segundos)",
+	)
 
 	class Meta:
 		ordering = ["orden"]
@@ -281,9 +298,27 @@ class Serie(models.Model):
 	)
 	orden_ejercicio = models.PositiveIntegerField(default=1)
 	numero_serie = models.PositiveIntegerField(validators=[MinValueValidator(1)])
-	repeticiones = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+	repeticiones = models.PositiveIntegerField(
+		null=True,
+		blank=True,
+		validators=[MinValueValidator(1)],
+	)
 	peso = models.DecimalField(
-		max_digits=7, decimal_places=2, validators=[MinValueValidator(0)]
+		max_digits=7,
+		decimal_places=2,
+		null=True,
+		blank=True,
+		validators=[MinValueValidator(0)],
+	)
+	duracion_segundos = models.PositiveIntegerField(
+		null=True,
+		blank=True,
+		validators=[MinValueValidator(1)],
+	)
+	descanso_segundos = models.PositiveIntegerField(
+		null=True,
+		blank=True,
+		validators=[MinValueValidator(0)],
 	)
 
 	class Meta:
@@ -308,4 +343,11 @@ class Serie(models.Model):
 		]
 
 	def __str__(self):
+		if self.duracion_segundos is not None:
+			descanso = (
+				f", {self.descanso_segundos} s de descanso"
+				if self.descanso_segundos is not None
+				else ""
+			)
+			return f"Serie {self.numero_serie}: {self.duracion_segundos} s{descanso}"
 		return f"Serie {self.numero_serie}: {self.peso} kg x {self.repeticiones}"
