@@ -11,36 +11,48 @@
     <ul>
         {% for sesion in bloque.sesiones %}
         <li>
-            <div class="session-header">
-                <strong>{{ sesion.usuario_entrenamiento.entrenamiento.nombre }}</strong>
-                <span>{{ sesion.fecha|time:"H:i" }}</span>
-            </div>
-            {% if sesion.notas %}
-            <p>{{ sesion.notas|linebreaksbr }}</p>
-            {% endif %}
-            {% regroup sesion.series.all by usuario_entrenamiento_ejercicio as ejercicios %}
-            {% for grupo in ejercicios %}
-            <section class="history-exercise">
-                <div class="history-exercise-heading">
-                    <strong>{{ grupo.grouper.entrenamiento_ejercicio.ejercicio.nombre }}</strong>
-                    <span>{{ grupo.list|length }} {% if grupo.list|length == 1 %}serie{% else %}series{% endif %}</span>
-                </div>
-                <div class="history-sets">
-                    {% for serie in grupo.list %}
-                    <div class="history-set">
-                        <span>Serie {{ serie.numero_serie }}</span>
-                        <span>{{ serie.repeticiones }} repeticiones</span>
-                        <strong>{{ serie.peso }} kg</strong>
-                    </div>
+            <details class="history-session">
+                <summary class="session-header">
+                    <span class="session-summary-title">
+                        <strong>{{ sesion.usuario_entrenamiento.entrenamiento.nombre }}</strong>
+                        <small>{{ sesion.fecha|time:"H:i" }}</small>
+                    </span>
+                    <span class="session-summary-action">Ver detalles</span>
+                </summary>
+                <div class="history-session-content">
+                    {% if sesion.notas %}
+                    <p>{{ sesion.notas|linebreaksbr }}</p>
+                    {% endif %}
+                    {% regroup sesion.series.all by usuario_entrenamiento_ejercicio as ejercicios %}
+                    {% for grupo in ejercicios %}
+                    <section class="history-exercise">
+                        <div class="history-exercise-heading">
+                            <strong>{{ grupo.grouper.entrenamiento_ejercicio.ejercicio.nombre }}</strong>
+                            <span>{{ grupo.list|length }} {% if grupo.list|length == 1 %}serie{% else %}series{% endif %}</span>
+                        </div>
+                        <div class="history-sets">
+                            {% for serie in grupo.list %}
+                            <div class="history-set">
+                                <span>Serie {{ serie.numero_serie }}</span>
+                                {% if serie.duracion_segundos != None %}
+                                <span>{{ serie.duracion_segundos }} segundos</span>
+                                <strong>{{ serie.descanso_segundos|default_if_none:0 }} s descanso</strong>
+                                {% else %}
+                                <span>{{ serie.repeticiones }} repeticiones</span>
+                                <strong>{{ serie.peso }} kg</strong>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </section>
+                    {% empty %}
+                    <p class="meta">Sin ejercicios registrados.</p>
                     {% endfor %}
+                    <div class="actions" style="margin-bottom: 0;">
+                        <a class="button secondary small" href="{% url 'editar_sesion' sesion.id %}">Ver sesión</a>
+                    </div>
                 </div>
-            </section>
-            {% empty %}
-            <p class="meta">Sin ejercicios registrados.</p>
-            {% endfor %}
-            <div class="actions" style="margin-bottom: 0;">
-                <a class="button secondary small" href="{% url 'editar_sesion' sesion.id %}">Ver sesión</a>
-            </div>
+            </details>
         </li>
         {% endfor %}
     </ul>
@@ -50,4 +62,18 @@
     <p class="muted">Todavía no tienes sesiones registradas.</p>
 </section>
 {% endfor %}
+<style>
+    .history-session { width: 100%; }
+    .history-session > summary { list-style: none; cursor: pointer; }
+    .history-session > summary::-webkit-details-marker { display: none; }
+    .history-session[open] > summary { margin-bottom: 12px; }
+    .session-summary-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+    .session-summary-title small { color: var(--muted); }
+    .session-summary-action { color: var(--green-dark); font-weight: 700; white-space: nowrap; }
+    .history-session[open] .session-summary-action { color: var(--muted); }
+    .history-session[open] .session-summary-action::before { content: "Ocultar detalles"; }
+    .history-session[open] .session-summary-action { font-size: 0; }
+    .history-session[open] .session-summary-action::before { font-size: .8rem; }
+    .history-session-content { border-top: 1px solid var(--line); padding-top: 10px; }
+</style>
 {% endblock %}

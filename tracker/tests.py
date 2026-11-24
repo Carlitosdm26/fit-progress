@@ -1543,6 +1543,8 @@ class AutenticacionYRutinasTests(TestCase):
 		self.client.force_login(usuario)
 
 		respuesta = self.client.get(reverse("historial_sesiones"))
+		self.assertContains(respuesta, 'class="history-session"', html=False)
+		self.assertContains(respuesta, "<summary", html=False)
 		self.assertContains(respuesta, "Press banca")
 		self.assertContains(respuesta, "Serie 1")
 		self.assertContains(respuesta, "Serie 2")
