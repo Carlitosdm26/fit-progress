@@ -37,6 +37,8 @@ def remove_unused_schema(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+	atomic = False
+
 	dependencies = [("tracker", "0015_ejercicio_mide_tiempo_and_more")]
 
 	operations = [migrations.RunPython(remove_unused_schema, migrations.RunPython.noop)]
