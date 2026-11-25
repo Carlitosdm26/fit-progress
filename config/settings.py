@@ -14,6 +14,8 @@ import logging
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -118,12 +120,20 @@ elif db_engine == "mysql":
             }
         }
     else:
-        DATABASES = {
-            "default": {
-                "ENGINE": "django.db.backends.sqlite3",
-                "NAME": BASE_DIR / "db.sqlite3",
-            }
-        }
+        missing_settings = [
+            setting
+            for setting, value in (
+                ("DB_HOST", mysql_host),
+                ("DB_USER", mysql_user),
+                ("DB_PASSWORD", mysql_password),
+                ("DB_NAME", mysql_name),
+            )
+            if not value
+        ]
+        raise ImproperlyConfigured(
+            "DB_ENGINE=mysql requires the following settings: "
+            + ", ".join(missing_settings)
+        )
 else:
     DATABASES = {
         "default": {

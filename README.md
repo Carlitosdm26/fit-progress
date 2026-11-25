@@ -5,11 +5,11 @@ Aplicación web Django para gestionar rutinas de gimnasio y registrar el progres
 ## Funcionalidades
 
 - Login individual para cada usuario.
-- Registro público con cuentas inactivas hasta que un administrador las active.
+- Registro público con cuentas activas al completar el registro.
 - Catálogo compartido de ejercicios, filtrable por grupo muscular y ampliable por cualquier usuario con una cuenta activa.
 - Creación y edición de rutinas personales; Administración puede asignarlas mediante copias independientes.
 - Registro progresivo de una sesión: se guarda un ejercicio cada vez.
-- Número variable de series por ejercicio, con repeticiones y peso decimal en kilogramos.
+- Número variable de series por ejercicio: repeticiones y peso decimal en kilogramos, o duración y descanso para ejercicios medidos por tiempo.
 - Los ejercicios de cada sesión se muestran en el mismo orden en el que se registraron.
 - Selección exclusiva de grupos musculares y materiales ya existentes al añadir ejercicios.
 - Edición de ejercicios ya registrados dentro de una sesión.
@@ -20,8 +20,8 @@ Aplicación web Django para gestionar rutinas de gimnasio y registrar el progres
 ## Requisitos
 
 - Python 3.10 o superior.
-- MySQL accesible desde la máquina local.
-- Credenciales de la base de datos en `.env`.
+- SQLite para desarrollo local o MySQL para despliegues.
+- Credenciales MySQL en `.env` cuando se use MySQL.
 
 ## Configuración
 
@@ -39,7 +39,7 @@ DB_HOST=localhost
 DB_PORT=3306
 DB_USER=usuario_mysql
 DB_PASSWORD=contraseña_mysql
-DB_NAME=fit_progress
+DB_NAME=dbfit
 ```
 
 No subas `.env` al repositorio. Contiene credenciales y está excluido mediante `.gitignore`.
@@ -48,7 +48,7 @@ No subas `.env` al repositorio. Contiene credenciales y está excluido mediante 
 
 ### En contenedor
 
-El contenedor escucha en el puerto 80 y Docker lo publica en el puerto 80 del servidor:
+El contenedor aplica las migraciones al arrancar y sirve la aplicación con Gunicorn en el puerto 80, que Docker publica en el puerto 80 del servidor:
 
 ```bash
 docker compose up --build -d
@@ -58,13 +58,13 @@ La aplicación estará disponible en [http://localhost/](http://localhost/).
 
 ### En local
 
-La forma recomendada de arrancar la aplicación es:
+La forma recomendada de arrancar la aplicación local es:
 
 ```bash
 ./run.sh
 ```
 
-El script verifica Python y `.env`, crea `.venv` si falta, instala dependencias, comprueba Django, aplica migraciones y arranca el servidor local en `0.0.0.0:8000`. En un despliegue nuevo, `migrate` crea las tablas de la aplicación dentro de la base configurada. La base MySQL indicada por `DB_NAME` debe existir previamente y el usuario configurado necesita permisos para crear y modificar tablas.
+El script verifica Python y `.env`, crea `.venv` si falta, instala dependencias, comprueba Django, aplica migraciones y arranca el servidor local en `0.0.0.0:8000`. Para desarrollo con SQLite, configura `DB_ENGINE=sqlite`; en MySQL, proporciona todas las variables `DB_*` y crea previamente el schema indicado por `DB_NAME`. La app falla al arrancar si se selecciona MySQL con configuración incompleta, en lugar de cambiar silenciosamente a SQLite. El servicio Docker incluido configura `DB_NAME=dbfit`; confirma que ese es el schema existente en el servidor antes de desplegar.
 
 Pulsa `Ctrl+C` para detener el servidor limpiamente.
 
@@ -76,7 +76,7 @@ Direcciones locales:
 
 ## Gestión de cuentas
 
-El registro público crea cuentas inactivas. Los usuarios pueden iniciar sesión, pero solo verán un aviso hasta que un administrador active sus cuentas desde `/admin/`.
+El registro público crea cuentas activas y permite acceder a la aplicación tras completar el registro. Un administrador también puede desactivar una cuenta desde `/admin/`.
 
 Los administradores también pueden crear cuentas directamente desde `Auth > Users` y decidir si deben estar activas.
 
@@ -88,7 +88,7 @@ Si todavía no existe un superusuario:
 
 Después, crea el usuario en `Auth > Users` desde `/admin/`, indicando su nombre y email. La cuenta de Django guarda tanto los datos de acceso como el perfil deportivo; no hace falta asignar un grupo ni crear o vincular un registro separado en `Tracker > Usuarios`.
 
-Las cuentas inactivas pueden iniciar sesión, pero solo verán un aviso para contactar con un administrador; no podrán acceder a las páginas de la aplicación hasta que se active su cuenta.
+Si un administrador desactiva una cuenta, el usuario puede iniciar sesión, pero solo verá un aviso para contactar con un administrador; no podrá acceder a las páginas de la aplicación hasta que se reactive la cuenta.
 
 Antes de desplegar la migración que unifica las tablas, haz una copia de seguridad de la base de datos. Los perfiles sin cuenta vinculada se convierten en cuentas con contraseña no utilizable; el superusuario deberá establecerles una contraseña desde el panel de administración.
 
@@ -110,7 +110,7 @@ Desde Administración se puede asignar una rutina a un usuario creando una copia
 2. En el dashboard pulsa `Crear entrenamiento`.
 3. Escribe el nombre y, si quieres, selecciona ejercicios. También puedes dejar la rutina vacía y completarla desde `Ejercicios`.
 4. En `Mis rutinas` pulsa `Registrar sesión`.
-5. Selecciona un ejercicio, indica el número de series y completa las repeticiones y el peso.
+5. Selecciona un ejercicio e indica el número de series. Completa repeticiones y peso, o duración y descanso si el ejercicio se mide por tiempo.
 6. Guarda el ejercicio y vuelve a la misma sesión para añadir el siguiente.
 7. Para corregir un ejercicio ya guardado, pulsa `Editar ejercicio`.
 8. Para modificar una rutina o una sesión, entra en su pantalla de edición.
@@ -126,6 +126,9 @@ Press banca
 
 Press inclinado
 	Serie 1: 12 repeticiones, 20 kg
+
+Plancha
+	Serie 1: 40 segundos, 20 segundos de descanso
 ```
 
 ## Eliminación de datos
@@ -147,11 +150,11 @@ Las acciones de borrado se realizan mediante `POST` y requieren autenticación. 
 - `EntrenamientoEjercicio`: ejercicios incluidos en una rutina y su orden.
 - `UsuarioEntrenamientoEjercicio`: ejercicio elegido por el usuario para esa rutina.
 - `SesionEntrenamiento`: una realización concreta de una rutina.
-- `Serie`: repeticiones, peso y número de serie realizados.
+- `Serie`: repeticiones y peso o duración y descanso, además del número de serie realizado.
 
 `UsuarioEntrenamiento` relaciona cada rutina con su propietario. Al asignarla a otra persona se crea un nuevo `Entrenamiento` y se copian sus ejercicios; la copia es independiente y no guarda una clave foránea a la rutina anterior.
 
-El peso se almacena como decimal y la unidad inicial es el kilogramo. Las restricciones de base de datos evitan relaciones y series duplicadas.
+El peso se almacena como decimal y la unidad inicial es el kilogramo. Los ejercicios configurados para medirse por tiempo registran duración y descanso en segundos. Las restricciones de base de datos evitan relaciones y series duplicadas.
 
 ## Comprobaciones
 
@@ -167,4 +170,4 @@ Ejecutar las pruebas usando una base temporal SQLite, sin tocar los datos reales
 DB_ENGINE=sqlite .venv/bin/python manage.py test
 ```
 
-El usuario de Clever Cloud puede no tener permisos para crear bases de datos `test_*`; por eso las pruebas se fuerzan a SQLite. La aplicación normal sigue usando MySQL porque `.env` mantiene `DB_ENGINE=mysql`.
+El usuario de Clever Cloud puede no tener permisos para crear bases de datos `test_*`; por eso las pruebas se fuerzan a SQLite. Para la aplicación normal, selecciona el motor con `DB_ENGINE` en `.env`; el contenedor incluido usa MySQL.

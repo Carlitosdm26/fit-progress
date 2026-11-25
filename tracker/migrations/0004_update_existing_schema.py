@@ -19,47 +19,21 @@ def _columns(connection, table_name):
         }
 
 
-def _archive_and_remove_column(apps, schema_editor, archive_model, model, field_name):
+def _remove_column(schema_editor, model, field_name):
     connection = schema_editor.connection
     table_name = model._meta.db_table
-    column_name = field_name
-    columns = _columns(connection, table_name)
-    if column_name not in columns:
+    if field_name not in _columns(connection, table_name):
         return
 
     quote_name = schema_editor.quote_name
-    select_sql = (
-        f"SELECT {quote_name(model._meta.pk.column)}, {quote_name(column_name)} "
-        f"FROM {quote_name(table_name)} "
-        f"WHERE {quote_name(column_name)} IS NOT NULL "
-        f"AND {quote_name(column_name)} <> %s"
-    )
-    with connection.cursor() as cursor:
-        cursor.execute(select_sql, [""])
-        while rows := cursor.fetchmany(500):
-            archive_model.objects.using(connection.alias).bulk_create(
-                [
-                    archive_model(
-                        modelo=f"tracker.{model._meta.model_name}",
-                        registro_id=record_id,
-                        campo=field_name,
-                        valor=value,
-                    )
-                    for record_id, value in rows
-                ],
-                batch_size=500,
-                ignore_conflicts=True,
-            )
-
     schema_editor.execute(
-        f"ALTER TABLE {quote_name(table_name)} DROP COLUMN {quote_name(column_name)}"
+        f"ALTER TABLE {quote_name(table_name)} DROP COLUMN {quote_name(field_name)}"
     )
 
 
 def update_existing_schema(apps, schema_editor):
     connection = schema_editor.connection
     alias = connection.alias
-    tables = set(connection.introspection.table_names())
     content_type_model = apps.get_model("contenttypes", "ContentType")
     old_content_type = content_type_model.objects.using(alias).filter(
         app_label="auth", model="user"
@@ -95,20 +69,10 @@ def update_existing_schema(apps, schema_editor):
                 "Revisa los permisos antes de continuar con la migraci??n."
             )
 
-    profile_model = apps.get_model("tracker", "PerfilUsuario")
-    archive_model = apps.get_model("tracker", "DatoArchivado")
-
-    for model in (profile_model, archive_model):
-        if model._meta.db_table not in tables:
-            schema_editor.create_model(model)
-            tables.add(model._meta.db_table)
-
     for model_name, field_names in ARCHIVED_FIELDS.items():
         model = apps.get_model("tracker", model_name)
         for field_name in field_names:
-            _archive_and_remove_column(
-                apps, schema_editor, archive_model, model, field_name
-            )
+            _remove_column(schema_editor, model, field_name)
 
     user_table = apps.get_model("tracker", "Usuario")._meta.db_table
     user_columns = _columns(connection, user_table)

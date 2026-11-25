@@ -111,34 +111,6 @@ class UsuarioPermiso(models.Model):
 		]
 
 
-class DatoArchivado(models.Model):
-	modelo = models.CharField(max_length=100)
-	registro_id = models.PositiveBigIntegerField()
-	campo = models.CharField(max_length=100)
-	valor = models.TextField()
-
-	class Meta:
-		constraints = [
-			models.UniqueConstraint(
-				fields=["modelo", "registro_id", "campo"],
-				name="unique_dato_archivado",
-			)
-		]
-		ordering = ["modelo", "registro_id", "campo"]
-
-
-class PerfilUsuario(models.Model):
-	usuario = models.OneToOneField(
-		settings.AUTH_USER_MODEL,
-		on_delete=models.CASCADE,
-		related_name="perfil_admin",
-	)
-	descripcion = models.TextField("Descripci??n", blank=True)
-
-	def __str__(self):
-		return f"Perfil de {self.usuario.username}"
-
-
 class Entrenamiento(models.Model):
 	nombre = models.CharField(max_length=120)
 	descripcion = models.TextField(blank=True)
@@ -194,7 +166,6 @@ class UsuarioEntrenamiento(models.Model):
 	entrenamiento = models.ForeignKey(
 		Entrenamiento, on_delete=models.CASCADE, related_name="usuarios"
 	)
-	fecha_asignacion = models.DateTimeField(auto_now_add=True)
 	activa = models.BooleanField(default=True)
 
 	class Meta:

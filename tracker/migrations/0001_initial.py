@@ -152,7 +152,6 @@ class Migration(migrations.Migration):
                         verbose_name="ID",
                     ),
                 ),
-                ("fecha_asignacion", models.DateTimeField(auto_now_add=True)),
                 (
                     "entrenamiento",
                     models.ForeignKey(

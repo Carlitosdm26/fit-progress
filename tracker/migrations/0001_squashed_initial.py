@@ -46,20 +46,6 @@ class Migration(migrations.Migration):
             ],
         ),
         migrations.CreateModel(
-            name='DatoArchivado',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('modelo', models.CharField(max_length=100)),
-                ('registro_id', models.PositiveBigIntegerField()),
-                ('campo', models.CharField(max_length=100)),
-                ('valor', models.TextField()),
-            ],
-            options={
-                'ordering': ['modelo', 'registro_id', 'campo'],
-                'constraints': [models.UniqueConstraint(fields=('modelo', 'registro_id', 'campo'), name='unique_dato_archivado')],
-            },
-        ),
-        migrations.CreateModel(
             name='Ejercicio',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
@@ -100,18 +86,9 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
-            name='PerfilUsuario',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('descripcion', models.TextField(blank=True, verbose_name='Descripci??n')),
-                ('usuario', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='perfil_admin', to=settings.AUTH_USER_MODEL)),
-            ],
-        ),
-        migrations.CreateModel(
             name='UsuarioEntrenamiento',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('fecha_asignacion', models.DateTimeField(auto_now_add=True)),
                 ('entrenamiento', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='usuarios', to='tracker.entrenamiento')),
                 ('usuario', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='entrenamientos', to=settings.AUTH_USER_MODEL)),
             ],

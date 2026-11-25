@@ -72,10 +72,6 @@ def get_client_ip(request):
 	return request.META.get("REMOTE_ADDR", "unknown")
 
 
-def perfil_actual(request):
-	return request.user
-
-
 def active_user_required(view_func):
 	@wraps(view_func)
 	def wrapped_view(request, *args, **kwargs):
@@ -148,9 +144,7 @@ def logout_view(request):
 @login_required
 @active_user_required
 def dashboard(request):
-	perfil = perfil_actual(request)
-	if perfil is None:
-		return render(request, "tracker/sin_perfil.html")
+	perfil = request.user
 	asignaciones = UsuarioEntrenamiento.objects.select_related(
 		"entrenamiento"
 	).filter(usuario=perfil, activa=True, entrenamiento__eliminada=False)
@@ -183,9 +177,7 @@ def dashboard(request):
 @login_required
 @active_user_required
 def historial_sesiones(request):
-	perfil = perfil_actual(request)
-	if perfil is None:
-		return render(request, "tracker/sin_perfil.html")
+	perfil = request.user
 	sesiones = SesionEntrenamiento.objects.select_related(
 		"usuario_entrenamiento__entrenamiento"
 	).filter(usuario_entrenamiento__usuario=perfil).prefetch_related(
@@ -216,7 +208,7 @@ def historial_sesiones(request):
 @login_required
 @active_user_required
 def ejercicios(request):
-	perfil = perfil_actual(request)
+	perfil = request.user
 	form = EjercicioForm(request.POST or None)
 	if request.method == "POST" and form.is_valid():
 		ejercicio = form.save()
@@ -261,7 +253,7 @@ def ejercicios(request):
 @active_user_required
 @require_POST
 def ejercicio_anadir_a_rutina(request, ejercicio_id):
-	perfil = perfil_actual(request)
+	perfil = request.user
 	ejercicio = get_object_or_404(Ejercicio, pk=ejercicio_id, activo=True)
 	form = AgregarEjercicioARutinaForm(perfil, request.POST)
 	if not form.is_valid():
@@ -308,9 +300,7 @@ def ejercicio_anadir_a_rutina(request, ejercicio_id):
 @login_required
 @active_user_required
 def crear_entrenamiento(request):
-	perfil = perfil_actual(request)
-	if perfil is None:
-		return render(request, "tracker/sin_perfil.html")
+	perfil = request.user
 	form = EntrenamientoForm(request.POST or None)
 	ejercicios_seleccionados = {
 		str(ejercicio_id) for ejercicio_id in (form["ejercicios"].value() or [])
@@ -368,9 +358,7 @@ def crear_entrenamiento(request):
 @login_required
 @active_user_required
 def editar_entrenamiento(request, asignacion_id):
-	perfil = perfil_actual(request)
-	if perfil is None:
-		return render(request, "tracker/sin_perfil.html")
+	perfil = request.user
 	asignacion = UsuarioEntrenamiento.objects.select_related("entrenamiento").filter(
 		pk=asignacion_id, usuario=perfil, activa=True
 	).first()
@@ -480,9 +468,7 @@ def editar_entrenamiento(request, asignacion_id):
 @active_user_required
 @require_POST
 def eliminar_entrenamiento(request, asignacion_id):
-	perfil = perfil_actual(request)
-	if perfil is None:
-		return redirect("login")
+	perfil = request.user
 	with transaction.atomic():
 		asignacion = UsuarioEntrenamiento.objects.select_for_update().filter(
 			pk=asignacion_id, usuario=perfil, activa=True
@@ -510,9 +496,7 @@ def eliminar_entrenamiento(request, asignacion_id):
 @login_required
 @active_user_required
 def registrar_sesion(request, asignacion_id):
-	perfil = perfil_actual(request)
-	if perfil is None:
-		return render(request, "tracker/sin_perfil.html")
+	perfil = request.user
 	asignacion = UsuarioEntrenamiento.objects.filter(
 		pk=asignacion_id, usuario=perfil, activa=True
 	).first()
@@ -560,9 +544,7 @@ def registrar_sesion(request, asignacion_id):
 @login_required
 @active_user_required
 def editar_sesion(request, sesion_id):
-	perfil = perfil_actual(request)
-	if perfil is None:
-		return render(request, "tracker/sin_perfil.html")
+	perfil = request.user
 	sesion = SesionEntrenamiento.objects.select_related(
 		"usuario_entrenamiento__entrenamiento"
 	).prefetch_related("series").filter(
@@ -626,9 +608,7 @@ def editar_sesion(request, sesion_id):
 @active_user_required
 @require_POST
 def eliminar_sesion(request, sesion_id):
-	perfil = perfil_actual(request)
-	if perfil is None:
-		return redirect("login")
+	perfil = request.user
 	with transaction.atomic():
 		sesion = SesionEntrenamiento.objects.select_for_update().filter(
 			pk=sesion_id, usuario_entrenamiento__usuario=perfil
@@ -646,9 +626,7 @@ def eliminar_sesion(request, sesion_id):
 @active_user_required
 @require_POST
 def eliminar_ejercicio_sesion(request, sesion_id, seleccion_id):
-	perfil = perfil_actual(request)
-	if perfil is None:
-		return redirect("login")
+	perfil = request.user
 	deleted, _ = Serie.objects.filter(
 		sesion_entrenamiento_id=sesion_id,
 		sesion_entrenamiento__usuario_entrenamiento__usuario=perfil,
@@ -663,9 +641,7 @@ def eliminar_ejercicio_sesion(request, sesion_id, seleccion_id):
 @active_user_required
 @require_POST
 def eliminar_serie_sesion(request, sesion_id, serie_id):
-	perfil = perfil_actual(request)
-	if perfil is None:
-		return redirect("login")
+	perfil = request.user
 	sesion = SesionEntrenamiento.objects.filter(
 		pk=sesion_id, usuario_entrenamiento__usuario=perfil
 	).first()

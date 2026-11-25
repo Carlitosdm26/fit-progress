@@ -1,11 +1,15 @@
+import os
+import subprocess
+import sys
 from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import IntegrityError, connection
+from django.db import IntegrityError, connection, models
 from django.db.migrations.executor import MigrationExecutor
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
@@ -19,7 +23,6 @@ from .models import (
 	Ejercicio,
 	Entrenamiento,
 	EntrenamientoEjercicio,
-	PerfilUsuario,
 	Serie,
 	SesionEntrenamiento,
 	UsuarioEntrenamiento,
@@ -29,6 +32,28 @@ from .models import (
 
 def vincular_usuario_gimnasio(user, _nombre):
 	return user
+
+
+class DatabaseSettingsTests(TestCase):
+	def test_mysql_with_incomplete_settings_does_not_fall_back_to_sqlite(self):
+		environment = os.environ.copy()
+		environment["DB_ENGINE"] = "mysql"
+		environment["DJANGO_SETTINGS_MODULE"] = "config.settings"
+		for setting in ("DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME"):
+			environment[setting] = ""
+
+		result = subprocess.run(
+			[sys.executable, "manage.py", "check"],
+			cwd=Path(__file__).resolve().parents[1],
+			env=environment,
+			capture_output=True,
+			text=True,
+			check=False,
+		)
+
+		self.assertNotEqual(result.returncode, 0)
+		self.assertIn("DB_ENGINE=mysql requires the following settings:", result.stderr)
+		self.assertIn("DB_HOST, DB_USER, DB_PASSWORD, DB_NAME", result.stderr)
 
 
 class SeguimientoModelTests(TestCase):
@@ -313,13 +338,6 @@ class AutenticacionYRutinasTests(TestCase):
 			respuesta,
 			reverse("panel_admin:usuario_detalle", args=[user.pk]),
 		)
-
-		PerfilUsuario.objects.create(usuario=user, descripcion="Perfil de prueba")
-		respuesta = self.client.get(
-			reverse("panel_admin:usuario_detalle", args=[user.pk])
-		)
-		self.assertEqual(respuesta.status_code, 200)
-		self.assertContains(respuesta, "usuario@example.com")
 
 	def test_panel_admin_requires_staff(self):
 		url = reverse("panel_admin:inicio")
@@ -1426,6 +1444,51 @@ class AutenticacionYRutinasTests(TestCase):
 		self.assertTrue(Entrenamiento.objects.filter(pk=entrenamiento.pk).exists())
 		self.assertTrue(UsuarioEntrenamiento.objects.filter(pk=asignacion.pk).exists())
 
+	def test_panel_admin_muestra_duracion_y_descanso_en_series_temporizadas(self):
+		admin_user = get_user_model().objects.create_superuser(
+			username="admin",
+			email="admin@example.com",
+			password="test-password",
+		)
+		usuario = get_user_model().objects.create_user(
+			username="usuario",
+			email="usuario@example.com",
+			password="test-password",
+		)
+		entrenamiento = Entrenamiento.objects.create(nombre="Cardio")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=usuario, entrenamiento=entrenamiento
+		)
+		ejercicio = Ejercicio.objects.create(
+			nombre="Plancha", grupo_muscular="Abdomen", mide_tiempo=True
+		)
+		entrada = EntrenamientoEjercicio.objects.create(
+			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion, entrenamiento_ejercicio=entrada
+		)
+		sesion = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion, fecha=timezone.now()
+		)
+		Serie.objects.create(
+			sesion_entrenamiento=sesion,
+			usuario_entrenamiento_ejercicio=seleccion,
+			numero_serie=1,
+			duracion_segundos=40,
+			descanso_segundos=20,
+		)
+		self.client.force_login(admin_user)
+
+		respuesta = self.client.get(
+			reverse("panel_admin:sesion_detalle", args=[sesion.pk])
+		)
+
+		self.assertContains(respuesta, "Duración")
+		self.assertContains(respuesta, "Descanso")
+		self.assertContains(respuesta, "40 s")
+		self.assertContains(respuesta, "20 s")
+
 	def test_panel_admin_al_eliminar_ultima_sesion_purga_rutina_ya_eliminada(self):
 		admin_user = get_user_model().objects.create_superuser(
 			username="admin",
@@ -1689,12 +1752,140 @@ class AutenticacionYRutinasTests(TestCase):
 
 
 class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
+	def test_clean_schema_omits_unused_tables_and_assignment_timestamp(self):
+		tables = set(connection.introspection.table_names())
+		self.assertFalse(
+			tables
+			& {
+				"tracker_datoarchivado",
+				"tracker_perfilusuario",
+				"django_admin_log",
+			}
+		)
+		with connection.cursor() as cursor:
+			columns = {
+				column.name
+				for column in connection.introspection.get_table_description(
+					cursor, "tracker_usuarioentrenamiento"
+				)
+			}
+		self.assertNotIn("fecha_asignacion", columns)
+
+	def test_cleanup_migration_drops_existing_tables_and_column(self):
+		obsolete_tables = (
+			"tracker_perfilusuario",
+			"tracker_datoarchivado",
+			"django_admin_log",
+		)
+		quote_name = connection.ops.quote_name
+		with connection.cursor() as cursor:
+			for table_name in obsolete_tables:
+				cursor.execute(
+					f"CREATE TABLE {quote_name(table_name)} (id integer primary key)"
+				)
+
+		assignment_model = MigrationExecutor(connection).loader.project_state(
+			MigrationExecutor(connection).loader.graph.leaf_nodes()
+		).apps.get_model("tracker", "UsuarioEntrenamiento")
+		legacy_field = models.DateTimeField(null=True)
+		legacy_field.model = assignment_model
+		legacy_field.set_attributes_from_name("fecha_asignacion")
+		with connection.schema_editor() as schema_editor:
+			schema_editor.add_field(assignment_model, legacy_field)
+
+		migration = __import__(
+			"tracker.migrations.0016_remove_unused_schema",
+			fromlist=["remove_unused_schema"],
+		)
+		apps = MigrationExecutor(connection).loader.project_state(
+			MigrationExecutor(connection).loader.graph.leaf_nodes()
+		).apps
+		with connection.schema_editor() as schema_editor:
+			migration.remove_unused_schema(apps, schema_editor)
+
+		tables = set(connection.introspection.table_names())
+		self.assertFalse(tables & set(obsolete_tables))
+		with connection.cursor() as cursor:
+			columns = {
+				column.name
+				for column in connection.introspection.get_table_description(
+					cursor, "tracker_usuarioentrenamiento"
+				)
+			}
+		self.assertNotIn("fecha_asignacion", columns)
+
+	def test_legacy_notes_column_is_dropped_without_archive_table(self):
+		migration_apps = MigrationExecutor(connection).loader.project_state(
+			[("tracker", "0001_squashed_initial")]
+		).apps
+		LegacyEntrenamiento = migration_apps.get_model("tracker", "Entrenamiento")
+		table_name = LegacyEntrenamiento._meta.db_table
+		with connection.cursor() as cursor:
+			columns = {
+				column.name
+				for column in connection.introspection.get_table_description(
+					cursor, table_name
+				)
+			}
+		if "notas" not in columns:
+			notas = models.TextField(blank=True, default="")
+			notas.model = Entrenamiento
+			notas.set_attributes_from_name("notas")
+			with connection.schema_editor() as schema_editor:
+				schema_editor.add_field(Entrenamiento, notas)
+
+		with connection.cursor() as cursor:
+			columns = {
+				column.name
+				for column in connection.introspection.get_table_description(
+					cursor, table_name
+				)
+			}
+		insert_values = {
+			"nombre": "Rutina antigua",
+			"descripcion": "",
+			"fecha_creacion": timezone.now(),
+			"notas": "",
+			"eliminada": False,
+		}
+		insert_columns = [name for name in insert_values if name in columns]
+		quote_name = connection.ops.quote_name
+		with connection.cursor() as cursor:
+			cursor.execute(
+				f"INSERT INTO {quote_name(table_name)} "
+				f"({', '.join(quote_name(name) for name in insert_columns)}) "
+				f"VALUES ({', '.join('%s' for _ in insert_columns)})",
+				[insert_values[name] for name in insert_columns],
+			)
+			entrenamiento_id = cursor.lastrowid
+			cursor.execute(
+				"UPDATE tracker_entrenamiento SET notas = %s WHERE id = %s",
+				["nota que debe conservarse", entrenamiento_id],
+			)
+
+		migration = __import__(
+			"tracker.migrations.0004_squashed_0006",
+			fromlist=["update_existing_schema"],
+		)
+		with connection.schema_editor() as schema_editor:
+			migration.update_existing_schema(migration_apps, schema_editor)
+
+		with connection.cursor() as cursor:
+			columns = {
+				column.name
+				for column in connection.introspection.get_table_description(
+					cursor, table_name
+				)
+			}
+		self.assertNotIn("notas", columns)
+		self.assertNotIn(
+			"tracker_datoarchivado",
+			connection.introspection.table_names(),
+		)
+
 	def test_migracion_crea_copias_personales_y_conserva_las_series(self):
 		migration_anterior = ("tracker", "0006_usuarioentrenamiento_activa")
-		migracion_actual = (
-			"tracker",
-			"0007_entrenamiento_es_plantilla_entrenamiento_plantilla_and_more",
-		)
+		migracion_actual = ("tracker", "0007_squashed_routine_ownership")
 		executor = MigrationExecutor(connection)
 		executor.migrate([migration_anterior])
 		apps_anteriores = executor.loader.project_state([migration_anterior]).apps
@@ -1753,18 +1944,20 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 				"tracker", "UsuarioEntrenamientoEjercicio"
 			)
 			SerieActual = apps_actuales.get_model("tracker", "Serie")
-			plantilla = EntrenamientoActual.objects.get(pk=rutina.pk)
 			asignacion_uno = AsignacionActual.objects.get(pk=asignaciones[0].pk)
 			asignacion_dos = AsignacionActual.objects.get(pk=asignaciones[1].pk)
-			self.assertTrue(plantilla.es_plantilla)
 			self.assertNotEqual(asignacion_uno.entrenamiento_id, rutina.pk)
 			self.assertNotEqual(asignacion_dos.entrenamiento_id, rutina.pk)
 			self.assertNotEqual(
 				asignacion_uno.entrenamiento_id, asignacion_dos.entrenamiento_id
 			)
 			self.assertEqual(
-				asignacion_uno.entrenamiento.plantilla_id,
-				asignacion_dos.entrenamiento.plantilla_id,
+				asignacion_uno.entrenamiento.nombre,
+				asignacion_dos.entrenamiento.nombre,
+			)
+			self.assertEqual(asignacion_uno.entrenamiento.nombre, rutina.nombre)
+			self.assertFalse(
+				UsuarioEntrenamiento.objects.filter(entrenamiento_id=rutina.pk).exists()
 			)
 			self.assertEqual(
 				SerieActual.objects.get(pk=serie.pk)
@@ -1937,42 +2130,6 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 		finally:
 			with connection.schema_editor() as schema_editor:
 				schema_editor.create_model(group_through)
-
-		self.assertEqual(response.status_code, 200)
-
-	def test_missing_profile_table_does_not_break_admin_and_migration_restores_it(self):
-		from django.apps import apps
-
-		admin_user = get_user_model().objects.create_superuser(
-			username="admin",
-			email="admin@example.com",
-			password="UnaClaveSegura123!",
-		)
-		user = get_user_model().objects.create_user(
-			username="usuario",
-			email="usuario@example.com",
-			password="UnaClaveSegura123!",
-		)
-		profile_model = apps.get_model("tracker", "PerfilUsuario")
-		migration = __import__(
-			"tracker.migrations.0005_ensure_perfilusuario_table",
-			fromlist=["ensure_perfilusuario_table"],
-		)
-		self.client.force_login(admin_user)
-		self.client.raise_request_exception = False
-		change_url = reverse("panel_admin:usuario_editar", args=[user.pk])
-
-		with connection.schema_editor() as schema_editor:
-			schema_editor.delete_model(profile_model)
-
-		response = self.client.get(change_url)
-		self.assertEqual(response.status_code, 200)
-
-		with connection.schema_editor() as schema_editor:
-			migration.ensure_perfilusuario_table(apps, schema_editor)
-			migration.ensure_perfilusuario_table(apps, schema_editor)
-
-		response = self.client.get(change_url)
 
 		self.assertEqual(response.status_code, 200)
 
@@ -2613,6 +2770,24 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 		self.assertEqual(respuesta.status_code, 200)
 		self.assertContains(respuesta, "Remo")
 		self.assertNotContains(respuesta, "Ya has registrado todos los ejercicios")
+
+	def test_sesion_sin_ejercicios_no_incluye_script_del_formulario(self):
+		cuenta = get_user_model().objects.create_user(
+			username="rutina-vacia@example.com",
+			email="rutina-vacia@example.com",
+			password="UnaClaveSegura123!",
+		)
+		entrenamiento = Entrenamiento.objects.create(nombre="Rutina vacía")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=cuenta, entrenamiento=entrenamiento
+		)
+		self.client.force_login(cuenta)
+
+		respuesta = self.client.get(reverse("registrar_sesion", args=[asignacion.pk]))
+
+		self.assertEqual(respuesta.status_code, 200)
+		self.assertContains(respuesta, "Esta rutina todavía no tiene ejercicios disponibles.")
+		self.assertNotContains(respuesta, "const numeroSeries")
 
 	def test_usuario_puede_editar_rutina(self):
 		cuenta = get_user_model().objects.create_user(

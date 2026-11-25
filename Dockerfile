@@ -21,4 +21,4 @@ RUN python manage.py collectstatic --noinput
 
 EXPOSE 80
 
-CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:80"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:80"]

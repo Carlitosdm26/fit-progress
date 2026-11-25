@@ -98,6 +98,7 @@
     @media (max-width: 600px) { .set-row { grid-template-columns: 1fr; gap: 0; } }
     @media (max-width: 420px) { .session-set { align-items: flex-start; flex-direction: column; } .session-set form, .session-set .button { width: 100%; } }
 </style>
+{% if puede_anadir or editando_ejercicio %}
 <script>
     const numeroSeries = document.getElementById("{{ form.numero_series.id_for_label }}");
     const seriesContainer = document.getElementById("series-container");
@@ -159,4 +160,5 @@
 
     numeroSeries.addEventListener("change", actualizarSeries);
 </script>
+{% endif %}
 {% endblock %}
