@@ -663,7 +663,11 @@ class EjercicioSesionForm(forms.Form):
 		empty_label=None,
 	)
 	numero_series = forms.IntegerField(
-		min_value=1, max_value=20, initial=0, label="Número de series"
+		min_value=1,
+		max_value=20,
+		initial=1,
+		label="Número de series",
+		widget=forms.HiddenInput,
 	)
 	notas = forms.CharField(
 		label="Notas de la sesión",
@@ -688,18 +692,6 @@ class EjercicioSesionForm(forms.Form):
 			self.fields["ejercicio"].initial = selected_id
 		if sesion is not None:
 			self.fields["notas"].initial = sesion.notas
-		existing_series = []
-		if sesion is not None and selected_id:
-			existing_series = list(
-				sesion.series.filter(usuario_entrenamiento_ejercicio_id=selected_id).order_by("numero_serie")
-			)
-		count_value = self.data.get("numero_series") if self.is_bound else len(existing_series)
-		try:
-			count_value = min(max(int(count_value or 0), 0), 20)
-		except (TypeError, ValueError):
-			count_value = 0
-		self.fields["numero_series"].initial = count_value
-		self.series_fields = []
 		selected_selection = None
 		if self.is_bound:
 			try:
@@ -708,8 +700,51 @@ class EjercicioSesionForm(forms.Form):
 				pass
 		elif selected_id:
 			selected_selection = selecciones.filter(pk=selected_id).first()
-		if selected_selection is None:
+		else:
 			selected_selection = selecciones.first()
+		if selected_selection is not None and not self.is_bound:
+			self.fields["ejercicio"].initial = selected_selection.pk
+
+		existing_series = []
+		if sesion is not None and selected_selection is not None:
+			existing_series = list(
+				sesion.series.filter(
+					usuario_entrenamiento_ejercicio=selected_selection
+				).order_by("numero_serie")
+			)
+		previous_series = []
+		if selected_selection is not None and not existing_series:
+			previous_session = (
+				SesionEntrenamiento.objects.filter(
+					usuario_entrenamiento=asignacion,
+					series__usuario_entrenamiento_ejercicio=selected_selection,
+				)
+				.order_by("-fecha", "-pk")
+				.first()
+			)
+			if previous_session is not None:
+				previous_series = list(
+					Serie.objects.filter(
+						sesion_entrenamiento=previous_session,
+						usuario_entrenamiento_ejercicio=selected_selection,
+					).order_by("numero_serie")
+				)
+		series_source = existing_series or previous_series
+		series_source_by_number = {
+			serie.numero_serie: serie for serie in series_source
+		}
+		last_source_series = series_source[-1] if series_source else None
+		count_value = self.data.get("numero_series") if self.is_bound else (
+			len(existing_series)
+			if existing_series
+			else len(previous_series) or 1
+		)
+		try:
+			count_value = min(max(int(count_value or 1), 1), 20)
+		except (TypeError, ValueError):
+			count_value = 1
+		self.fields["numero_series"].initial = count_value
+		self.series_fields = []
 		mide_tiempo = bool(
 			selected_selection
 			and selected_selection.entrenamiento_ejercicio.ejercicio.mide_tiempo
@@ -720,16 +755,24 @@ class EjercicioSesionForm(forms.Form):
 			peso_name = f"peso_{numero_serie}"
 			tiempo_name = f"tiempo_{numero_serie}"
 			descanso_name = f"descanso_{numero_serie}"
+			completada_name = f"completada_{numero_serie}"
 			serie_existente = next(
-				(serie for serie in existing_series if serie.numero_serie == numero_serie), None
+				(serie for serie in existing_series if serie.numero_serie == numero_serie),
+				None,
+			)
+			serie_previa = series_source_by_number.get(numero_serie) or last_source_series
+			self.fields[completada_name] = forms.BooleanField(
+				required=False,
+				initial=serie_existente.completada if serie_existente else False,
+				label="Completada",
 			)
 			if mide_tiempo:
 				self.fields[tiempo_name] = forms.IntegerField(
 					required=False,
 					min_value=1,
 					initial=(
-						serie_existente.duracion_segundos
-						if serie_existente and serie_existente.duracion_segundos is not None
+						serie_previa.duracion_segundos
+						if serie_previa and serie_previa.duracion_segundos is not None
 						else (
 							selected_selection.entrenamiento_ejercicio.duracion_objetivo_segundos
 							if selected_selection else None
@@ -741,8 +784,8 @@ class EjercicioSesionForm(forms.Form):
 					required=False,
 					min_value=0,
 					initial=(
-						serie_existente.descanso_segundos
-						if serie_existente and serie_existente.descanso_segundos is not None
+						serie_previa.descanso_segundos
+						if serie_previa and serie_previa.descanso_segundos is not None
 						else (
 							selected_selection.entrenamiento_ejercicio.descanso_objetivo_segundos
 							if selected_selection else 0
@@ -753,15 +796,19 @@ class EjercicioSesionForm(forms.Form):
 				self.series_fields.append(
 					{
 						"number": numero_serie,
+						"completada_field": self[completada_name],
 						"tiempo_field": self[tiempo_name],
 						"descanso_field": self[descanso_name],
+						"previous_label": self._previous_series_label(
+							serie_previa, mide_tiempo
+						),
 					}
 				)
 			else:
 				self.fields[reps_name] = forms.IntegerField(
 					required=False,
 					min_value=1,
-					initial=serie_existente.repeticiones if serie_existente else None,
+					initial=serie_previa.repeticiones if serie_previa else None,
 					label=f"Serie {numero_serie} - repeticiones",
 				)
 				self.fields[peso_name] = forms.DecimalField(
@@ -769,16 +816,30 @@ class EjercicioSesionForm(forms.Form):
 					min_value=Decimal("0"),
 					max_digits=7,
 					decimal_places=2,
-					initial=serie_existente.peso if serie_existente else None,
+					initial=serie_previa.peso if serie_previa else None,
 					label=f"Serie {numero_serie} - peso (kg)",
 				)
 				self.series_fields.append(
 					{
 						"number": numero_serie,
+						"completada_field": self[completada_name],
 						"reps_field": self[reps_name],
 						"peso_field": self[peso_name],
+						"previous_label": self._previous_series_label(
+							serie_previa, mide_tiempo
+						),
 					}
 				)
+
+	@staticmethod
+	def _previous_series_label(serie, mide_tiempo):
+		if serie is None:
+			return "Sin sesión previa"
+		if mide_tiempo:
+			duracion = serie.duracion_segundos or "—"
+			descanso = serie.descanso_segundos or 0
+			return f"{duracion} s · {descanso} s descanso"
+		return f"{serie.peso} kg × {serie.repeticiones} reps"
 
 	def clean(self):
 		cleaned_data = super().clean()
@@ -798,6 +859,9 @@ class EjercicioSesionForm(forms.Form):
 						"peso": None,
 						"duracion_segundos": duracion,
 						"descanso_segundos": descanso if descanso is not None else 0,
+						"completada": cleaned_data.get(
+							f"completada_{serie['number']}", False
+						),
 					}
 				)
 			else:
@@ -815,6 +879,9 @@ class EjercicioSesionForm(forms.Form):
 							"peso": peso,
 							"duracion_segundos": None,
 							"descanso_segundos": None,
+							"completada": cleaned_data.get(
+								f"completada_{serie['number']}", False
+							),
 						}
 					)
 		if not self.series_data:

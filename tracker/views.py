@@ -678,6 +678,7 @@ def guardar_series(sesion, form, orden_ejercicio=None):
 				peso=serie["peso"],
 				duracion_segundos=serie["duracion_segundos"],
 				descanso_segundos=serie["descanso_segundos"],
+				completada=serie["completada"],
 			)
 			for serie in form.series_data
 		]

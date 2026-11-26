@@ -291,6 +291,7 @@ class Serie(models.Model):
 		blank=True,
 		validators=[MinValueValidator(0)],
 	)
+	completada = models.BooleanField(default=False)
 
 	class Meta:
 		ordering = [

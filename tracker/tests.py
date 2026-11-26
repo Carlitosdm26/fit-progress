@@ -1,7 +1,7 @@
 import os
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
@@ -1752,6 +1752,59 @@ class AutenticacionYRutinasTests(TestCase):
 
 
 class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
+	def test_migracion_marca_completadas_las_series_existentes(self):
+		migracion_previa = ("tracker", "0016_remove_unused_schema")
+		migracion_actual = ("tracker", "0017_serie_completada")
+		executor = MigrationExecutor(connection)
+		executor.migrate([migracion_previa])
+		apps_previas = executor.loader.project_state([migracion_previa]).apps
+		usuario = get_user_model().objects.create_user(
+			username="serie-historica@example.com",
+			email="serie-historica@example.com",
+			password="UnaClaveSegura123!",
+		)
+		EntrenamientoPrevio = apps_previas.get_model("tracker", "Entrenamiento")
+		EjercicioPrevio = apps_previas.get_model("tracker", "Ejercicio")
+		AsignacionPrevia = apps_previas.get_model("tracker", "UsuarioEntrenamiento")
+		EntradaPrevia = apps_previas.get_model("tracker", "EntrenamientoEjercicio")
+		SeleccionPrevia = apps_previas.get_model(
+			"tracker", "UsuarioEntrenamientoEjercicio"
+		)
+		SesionPrevia = apps_previas.get_model("tracker", "SesionEntrenamiento")
+		SeriePrevia = apps_previas.get_model("tracker", "Serie")
+		entrenamiento = EntrenamientoPrevio.objects.create(nombre="Rutina migrada")
+		ejercicio = EjercicioPrevio.objects.create(
+			nombre="Serie migrada", grupo_muscular="Pecho"
+		)
+		asignacion = AsignacionPrevia.objects.create(
+			usuario_id=usuario.pk, entrenamiento=entrenamiento
+		)
+		entrada = EntradaPrevia.objects.create(
+			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
+		)
+		seleccion = SeleccionPrevia.objects.create(
+			usuario_entrenamiento=asignacion, entrenamiento_ejercicio=entrada
+		)
+		sesion = SesionPrevia.objects.create(
+			usuario_entrenamiento=asignacion, fecha=timezone.now(), notas=""
+		)
+		serie = SeriePrevia.objects.create(
+			sesion_entrenamiento=sesion,
+			usuario_entrenamiento_ejercicio=seleccion,
+			numero_serie=1,
+			repeticiones=8,
+			peso=Decimal("50.00"),
+		)
+		try:
+			executor = MigrationExecutor(connection)
+			executor.migrate([migracion_actual])
+			apps_actuales = executor.loader.project_state([migracion_actual]).apps
+			SerieActual = apps_actuales.get_model("tracker", "Serie")
+			self.assertTrue(SerieActual.objects.get(pk=serie.pk).completada)
+		finally:
+			executor = MigrationExecutor(connection)
+			executor.migrate(executor.loader.graph.leaf_nodes())
+
 	def test_clean_schema_omits_unused_tables_and_assignment_timestamp(self):
 		tables = set(connection.introspection.table_names())
 		self.assertFalse(
@@ -2603,6 +2656,136 @@ class PerfilUsuarioAdminMigrationTests(TransactionTestCase):
 		self.assertRedirects(respuesta, reverse("ejercicios"))
 		ejercicio = Ejercicio.objects.get(nombre="Burpee con salto")
 		self.assertTrue(ejercicio.mide_tiempo)
+
+	def test_nueva_sesion_precarga_ultimas_series_de_cada_ejercicio(self):
+		cuenta = get_user_model().objects.create_user(
+			username="series-previas@example.com",
+			email="series-previas@example.com",
+			password="UnaClaveSegura123!",
+		)
+		entrenamiento = Entrenamiento.objects.create(nombre="Rutina de progreso")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=cuenta, entrenamiento=entrenamiento
+		)
+		ejercicio_peso = Ejercicio.objects.create(
+			nombre="Press banca", grupo_muscular="Pecho"
+		)
+		ejercicio_tiempo = Ejercicio.objects.create(
+			nombre="Plancha", grupo_muscular="Abdomen", mide_tiempo=True
+		)
+		selecciones = []
+		for orden, ejercicio in enumerate((ejercicio_peso, ejercicio_tiempo), start=1):
+			entrada = EntrenamientoEjercicio.objects.create(
+				entrenamiento=entrenamiento, ejercicio=ejercicio, orden=orden
+			)
+			selecciones.append(
+				UsuarioEntrenamientoEjercicio.objects.create(
+					usuario_entrenamiento=asignacion,
+					entrenamiento_ejercicio=entrada,
+				)
+			)
+		sesion_mas_antigua = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion,
+			fecha=timezone.now() - timedelta(days=2),
+		)
+		for numero in range(1, 5):
+			Serie.objects.create(
+				sesion_entrenamiento=sesion_mas_antigua,
+				usuario_entrenamiento_ejercicio=selecciones[0],
+				numero_serie=numero,
+				repeticiones=5,
+				peso=Decimal("30.00"),
+			)
+		Serie.objects.create(
+			sesion_entrenamiento=sesion_mas_antigua,
+			usuario_entrenamiento_ejercicio=selecciones[1],
+			numero_serie=1,
+			duracion_segundos=25,
+			descanso_segundos=10,
+		)
+		sesion_previa = SesionEntrenamiento.objects.create(
+			usuario_entrenamiento=asignacion,
+			fecha=timezone.now() - timedelta(days=1),
+		)
+		for numero, repeticiones in enumerate((12, 10, 8, 6), start=1):
+			Serie.objects.create(
+				sesion_entrenamiento=sesion_previa,
+				usuario_entrenamiento_ejercicio=selecciones[0],
+				numero_serie=numero,
+				repeticiones=repeticiones,
+				peso=Decimal("50.00"),
+			)
+		for numero, duracion in enumerate((40, 35), start=1):
+			Serie.objects.create(
+				sesion_entrenamiento=sesion_previa,
+				usuario_entrenamiento_ejercicio=selecciones[1],
+				numero_serie=numero,
+				duracion_segundos=duracion,
+				descanso_segundos=20 + numero * 5,
+			)
+		self.client.force_login(cuenta)
+
+		respuesta_peso = self.client.get(
+			reverse("registrar_sesion", args=[asignacion.pk]),
+			{"ejercicio": selecciones[0].pk},
+		)
+		self.assertEqual(respuesta_peso.status_code, 200)
+		form_peso = respuesta_peso.context["form"]
+		self.assertEqual(form_peso["numero_series"].value(), 4)
+		for numero, repeticiones in enumerate((12, 10, 8, 6), start=1):
+			self.assertEqual(form_peso[f"reps_{numero}"].value(), repeticiones)
+			self.assertEqual(form_peso[f"peso_{numero}"].value(), Decimal("50.00"))
+
+		respuesta_tiempo = self.client.get(
+			reverse("registrar_sesion", args=[asignacion.pk]),
+			{"ejercicio": selecciones[1].pk},
+		)
+		self.assertEqual(respuesta_tiempo.status_code, 200)
+		form_tiempo = respuesta_tiempo.context["form"]
+		self.assertTrue(form_tiempo.mide_tiempo)
+		self.assertEqual(form_tiempo["numero_series"].value(), 2)
+		self.assertEqual(form_tiempo["tiempo_1"].value(), 40)
+		self.assertEqual(form_tiempo["descanso_1"].value(), 25)
+		self.assertEqual(form_tiempo["tiempo_2"].value(), 35)
+		self.assertEqual(form_tiempo["descanso_2"].value(), 30)
+
+	def test_nueva_sesion_guarda_si_cada_serie_se_completo(self):
+		cuenta = get_user_model().objects.create_user(
+			username="tic-series@example.com",
+			email="tic-series@example.com",
+			password="UnaClaveSegura123!",
+		)
+		entrenamiento = Entrenamiento.objects.create(nombre="Rutina con tics")
+		asignacion = UsuarioEntrenamiento.objects.create(
+			usuario=cuenta, entrenamiento=entrenamiento
+		)
+		ejercicio = Ejercicio.objects.create(nombre="Remo", grupo_muscular="Espalda")
+		entrada = EntrenamientoEjercicio.objects.create(
+			entrenamiento=entrenamiento, ejercicio=ejercicio, orden=1
+		)
+		seleccion = UsuarioEntrenamientoEjercicio.objects.create(
+			usuario_entrenamiento=asignacion, entrenamiento_ejercicio=entrada
+		)
+		self.client.force_login(cuenta)
+
+		respuesta = self.client.post(
+			reverse("registrar_sesion", args=[asignacion.pk]),
+			{
+				"ejercicio": seleccion.pk,
+				"numero_series": "2",
+				"reps_1": "10",
+				"peso_1": "40",
+				"completada_1": "on",
+				"reps_2": "8",
+				"peso_2": "42",
+				"notas": "",
+			},
+		)
+
+		self.assertEqual(respuesta.status_code, 302)
+		sesion = SesionEntrenamiento.objects.get(usuario_entrenamiento=asignacion)
+		self.assertTrue(sesion.series.get(numero_serie=1).completada)
+		self.assertFalse(sesion.series.get(numero_serie=2).completada)
 
 	def test_usuario_puede_registrar_ejercicio_por_tiempo(self):
 		cuenta = get_user_model().objects.create_user(
